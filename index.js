@@ -13,7 +13,6 @@ app.use(cors({
 }));
 app.use(express.json());
 
-
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, {
     serverApi: {
@@ -23,8 +22,9 @@ const client = new MongoClient(uri, {
     }
 });
 
-
+// Database Collections
 let classesCollection;
+let postsCollection;
 
 async function run() {
     try {
@@ -32,8 +32,10 @@ async function run() {
         console.log("Successfully connected to MongoDB Atlas!");
 
         const db = client.db(process.env.AUTH_DB_NAME || "trainlibDB");
+        
+        // Initialize Collections
         classesCollection = db.collection("classes");
-      
+        postsCollection = db.collection("posts"); // Assumed collection name for forum posts
       
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -44,7 +46,7 @@ async function run() {
 }
 run().catch(console.dir);
 
-
+// GET: 6 highest booked workout sessions
 app.get('/featured-classes', async (req, res) => {
     try {
         if (!classesCollection) {
@@ -64,6 +66,26 @@ app.get('/featured-classes', async (req, res) => {
     }
 });
 
+// GET: 4 most recent forum posts for the dynamic landing section
+app.get('/latest-posts', async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        // Sort by 'createdAt' in descending order to get the newest posts first
+        const result = await postsCollection
+            .find()
+            .sort({ createdAt: -1 })
+            .limit(4)
+            .toArray();
+
+        res.send(result);
+    } catch (error) {
+        console.error("Error fetching latest forum posts:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running...');
