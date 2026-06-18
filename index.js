@@ -23,6 +23,7 @@ const client = new MongoClient(uri, {
 
 let classesCollection;
 let postsCollection;
+let bookingsCollection;
 
 async function run() {
     try {
@@ -33,6 +34,7 @@ async function run() {
         
         classesCollection = db.collection("classes");
         postsCollection = db.collection("posts"); 
+        bookingsCollection = db.collection("bookings");
       
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -139,7 +141,19 @@ app.get('/api/classes/:id', async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
-
+app.get('/api/bookings/check', async (req, res) => {
+    try {
+        if (!bookingsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        const { classId, email } = req.query;
+        const alreadyBooked = await bookingsCollection.findOne({ classId, userEmail: email });
+        res.send({ isBooked: !!alreadyBooked });
+    } catch (error) {
+        console.error("Error checking booking status:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running...');
 });
