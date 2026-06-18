@@ -22,9 +22,10 @@ const client = new MongoClient(uri, {
 });
 
 let classesCollection;
-let postsCollection;
+let postsCollection; 
 let bookingsCollection;
 let favoritesCollection;
+let commentsCollection;
 
 async function run() {
     try {
@@ -34,9 +35,10 @@ async function run() {
         const db = client.db(process.env.AUTH_DB_NAME || "trainlibDB");
         
         classesCollection = db.collection("classes");
-        postsCollection = db.collection("posts"); 
+        postsCollection = db.collection("forum_posts"); 
         bookingsCollection = db.collection("bookings");
         favoritesCollection = db.collection("favorites");
+        commentsCollection = db.collection("forum_comments"); 
       
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -46,6 +48,10 @@ async function run() {
     }
 }
 run().catch(console.dir);
+
+
+// CLASSES ENDPOINTS
+
 
 app.get('/featured-classes', async (req, res) => {
     try {
@@ -92,8 +98,6 @@ app.get('/all-classes', async (req, res) => {
         }
 
         const { search, category, page, perPage } = req.query;
-        
-        // Enforce the requirement: Only display approved classes
         let query = { status: "approved" }; 
 
         if (search) {
@@ -127,6 +131,7 @@ app.get('/all-classes', async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+
 app.get('/api/classes/:id', async (req, res) => {
     try {
         if (!classesCollection) {
@@ -145,6 +150,9 @@ app.get('/api/classes/:id', async (req, res) => {
 });
 
 
+// BOOKINGS ENDPOINTS
+
+
 app.post('/api/bookings', async (req, res) => {
     try {
         if (!bookingsCollection) {
@@ -153,7 +161,6 @@ app.post('/api/bookings', async (req, res) => {
 
         const bookingData = req.body;
 
-        
         const exists = await bookingsCollection.findOne({ 
             classId: bookingData.classId, 
             userEmail: bookingData.userEmail 
@@ -163,26 +170,40 @@ app.post('/api/bookings', async (req, res) => {
             return res.status(400).send({ success: false, message: "You have already booked this class" });
         }
 
-     
         const result = await bookingsCollection.insertOne({
             ...bookingData,
             bookedAt: new Date()
         });
 
-      
         if (classesCollection && bookingData.classId) {
-            await classesCollection.updateOne(
-                { _id: new ObjectId(bookingData.classId) },
-                { $inc: { bookingCount: 1 } }
+            let classQuery = {};
+            
+            if (ObjectId.isValid(bookingData.classId)) {
+                classQuery = { _id: new ObjectId(bookingData.classId) };
+            } else {
+                classQuery = { _id: bookingData.classId }; 
+            }
+
+            const updateResult = await classesCollection.updateOne(
+                classQuery,
+                { $inc: { bookingCount: 1 } } 
             );
+            
+            console.log("Class Booking Count Update Result:", updateResult);
         }
 
-        res.send({ success: true, insertedId: result.insertedId, message: "Booking successful!" });
+        res.send({ 
+            success: true, 
+            insertedId: result.insertedId, 
+            message: "Booking successful and count updated!" 
+        });
+
     } catch (error) {
         console.error("Error creating booking:", error);
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+
 app.get('/api/bookings/check', async (req, res) => {
     try {
         if (!bookingsCollection) {
@@ -196,6 +217,11 @@ app.get('/api/bookings/check', async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+
+
+// FAVORITES ENDPOINTS
+
+
 app.post('/api/favorites', async (req, res) => {
     try {
         if (!favoritesCollection) {
@@ -204,14 +230,12 @@ app.post('/api/favorites', async (req, res) => {
         
         const favoriteData = req.body;
         
-       
         const exists = await favoritesCollection.findOne({ 
             classId: favoriteData.classId, 
             userEmail: favoriteData.userEmail 
         });
 
         if (exists) {
-          
             await favoritesCollection.deleteOne({ 
                 classId: favoriteData.classId, 
                 userEmail: favoriteData.userEmail 
@@ -223,7 +247,6 @@ app.post('/api/favorites', async (req, res) => {
                 message: "Successfully removed from your favorites!" 
             });
         } else {
-            
             const result = await favoritesCollection.insertOne(favoriteData);
             
             return res.send({ 
@@ -239,6 +262,7 @@ app.post('/api/favorites', async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+
 app.get('/api/favorites/check', async (req, res) => {
     try {
         if (!favoritesCollection) {
@@ -249,6 +273,24 @@ app.get('/api/favorites/check', async (req, res) => {
         res.send({ isFavorite: !!isFavorite });
     } catch (error) {
         console.error("Error checking favorite status:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
+
+//  FORUM & DISCUSSION ENDPOINTS
+
+
+// 1. Get All Forum Posts (Public List View)
+app.get('/api/forum', async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        const result = await postsCollection.find().sort({ createdAt: -1 }).toArray();
+        res.send(result);
+    } catch (error) {
+        console.error("Error fetching forum posts:", error);
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
