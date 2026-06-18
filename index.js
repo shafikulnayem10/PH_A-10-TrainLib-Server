@@ -161,20 +161,41 @@ app.post('/api/favorites', async (req, res) => {
         if (!favoritesCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
+        
         const favoriteData = req.body;
+        
+       
         const exists = await favoritesCollection.findOne({ 
             classId: favoriteData.classId, 
             userEmail: favoriteData.userEmail 
         });
 
         if (exists) {
-            return res.status(400).send({ message: "Already added to favorites" });
+          
+            await favoritesCollection.deleteOne({ 
+                classId: favoriteData.classId, 
+                userEmail: favoriteData.userEmail 
+            });
+            
+            return res.send({ 
+                success: true, 
+                isFavorite: false, 
+                message: "Successfully removed from your favorites!" 
+            });
+        } else {
+            
+            const result = await favoritesCollection.insertOne(favoriteData);
+            
+            return res.send({ 
+                success: true, 
+                isFavorite: true, 
+                insertedId: result.insertedId,
+                message: "Successfully added to your favorites!" 
+            });
         }
 
-        const result = await favoritesCollection.insertOne(favoriteData);
-        res.send(result);
     } catch (error) {
-        console.error("Error adding to favorites:", error);
+        console.error("Error toggling favorite status:", error);
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
