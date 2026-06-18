@@ -32,7 +32,8 @@ let bookingsCollection;
 let favoritesCollection;
 let commentsCollection; 
 let usersCollection;      
-let sessionCollection;    
+let sessionCollection;   
+let trainerApplicationsCollection; 
 
 async function run() {
     try {
@@ -48,7 +49,7 @@ async function run() {
         commentsCollection = db.collection("forum_comments"); 
         usersCollection = db.collection("user"); 
         sessionCollection = db.collection("session");
-      
+       trainerApplicationsCollection = db.collection("trainer_applications");
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
@@ -493,6 +494,52 @@ app.patch('/api/forum/:id/vote', async (req, res) => {
         });
     } catch (error) {
         console.error("Error processing post vote:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
+//Role based Routes
+//User Routes
+app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
+    try {
+        if (!bookingsCollection || !favoritesCollection || !trainerApplicationsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        const userEmail = req.user.email;
+
+      
+        const totalBooked = await bookingsCollection.countDocuments({ userEmail: userEmail });
+
+      
+        const totalFavorites = await favoritesCollection.countDocuments({ userEmail: userEmail });
+
+      
+        const application = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
+
+        const trainerStatus = application ? application.status : "Not Applied"; 
+        const adminFeedback = application?.feedback || null;
+
+        res.send({
+            success: true,
+            stats: {
+                totalBooked,
+                totalFavorites
+            },
+            profile: {
+                name: req.user.name,
+                email: req.user.email,
+                image: req.user.image || null,
+                role: req.user.role || 'user',
+            },
+            trainerApplication: {
+                status: trainerStatus,
+                feedback: adminFeedback
+            }
+        });
+
+    } catch (error) {
+        console.error("Error fetching user overview data:", error);
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
