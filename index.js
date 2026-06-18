@@ -24,6 +24,7 @@ const client = new MongoClient(uri, {
 let classesCollection;
 let postsCollection;
 let bookingsCollection;
+let favoritesCollection;
 
 async function run() {
     try {
@@ -35,6 +36,7 @@ async function run() {
         classesCollection = db.collection("classes");
         postsCollection = db.collection("posts"); 
         bookingsCollection = db.collection("bookings");
+        favoritesCollection = db.collection("favorites");
       
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -151,6 +153,28 @@ app.get('/api/bookings/check', async (req, res) => {
         res.send({ isBooked: !!alreadyBooked });
     } catch (error) {
         console.error("Error checking booking status:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+app.post('/api/favorites', async (req, res) => {
+    try {
+        if (!favoritesCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        const favoriteData = req.body;
+        const exists = await favoritesCollection.findOne({ 
+            classId: favoriteData.classId, 
+            userEmail: favoriteData.userEmail 
+        });
+
+        if (exists) {
+            return res.status(400).send({ message: "Already added to favorites" });
+        }
+
+        const result = await favoritesCollection.insertOne(favoriteData);
+        res.send(result);
+    } catch (error) {
+        console.error("Error adding to favorites:", error);
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
