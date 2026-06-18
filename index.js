@@ -123,6 +123,22 @@ app.get('/all-classes', async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+app.get('/api/classes/:id', async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        const id = req.params.id;
+        const result = await classesCollection.findOne({ _id: new ObjectId(id) });
+        if (!result) {
+            return res.status(404).send({ message: "Class not found" });
+        }
+        res.send(result);
+    } catch (error) {
+        console.error("Error fetching class details:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running...');
