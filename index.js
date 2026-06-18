@@ -178,6 +178,19 @@ app.post('/api/favorites', async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+app.get('/api/favorites/check', async (req, res) => {
+    try {
+        if (!favoritesCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        const { classId, email } = req.query;
+        const isFavorite = await favoritesCollection.findOne({ classId, userEmail: email });
+        res.send({ isFavorite: !!isFavorite });
+    } catch (error) {
+        console.error("Error checking favorite status:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running...');
 });
