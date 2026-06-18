@@ -538,6 +538,32 @@ app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
             }
         });
 
+// Get all booked classes for the logged-in user directly from bookings collection
+app.get('/api/user/booked-classes', verifyToken, verifyUser, async (req, res) => {
+    try {
+        if (!bookingsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        const userEmail = req.user.email;
+
+        // Fetch bookings matching userEmail directly
+        const bookedClasses = await bookingsCollection
+            .find({ userEmail: userEmail })
+            .sort({ bookedAt: -1 }) // Newest bookings first
+            .toArray();
+
+        res.send({
+            success: true,
+            data: bookedClasses
+        });
+
+    } catch (error) {
+        console.error("Error fetching booked classes:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
     } catch (error) {
         console.error("Error fetching user overview data:", error);
         res.status(500).send({ message: "Internal Server Error" });
