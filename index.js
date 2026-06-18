@@ -25,7 +25,7 @@ let classesCollection;
 let postsCollection; 
 let bookingsCollection;
 let favoritesCollection;
-let commentsCollection;
+let commentsCollection; 
 
 async function run() {
     try {
@@ -278,7 +278,7 @@ app.get('/api/favorites/check', async (req, res) => {
 });
 
 
-//  FORUM & DISCUSSION ENDPOINTS
+// FORUM & DISCUSSION ENDPOINTS
 
 
 // 1. Get All Forum Posts (Public List View)
@@ -294,6 +294,150 @@ app.get('/api/forum', async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+
+// 2. Get Single Forum Post Details (Public Details View)
+app.get('/api/forum/:id', async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        const id = req.params.id;
+        const result = await postsCollection.findOne({ _id: new ObjectId(id) });
+        if (!result) {
+            return res.status(404).send({ message: "Forum post not found" });
+        }
+        res.send(result);
+    } catch (error) {
+        console.error("Error fetching single forum post:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
+// 3. Get Thread Comments Joined with User Details
+app.get('/api/forum/:id/comments', async (req, res) => {
+    try {
+        if (!commentsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        const id = req.params.id;
+        
+       
+        const comments = await commentsCollection.aggregate([
+            { $match: { postId: id } },
+            {
+                $lookup: {
+                    from: 'users',
+                    let: { userObjId: { $toObjectId: "$userId" } },
+                    pipeline: [
+                        { $match: { $expr: { $eq: ["$_id", "$$userObjId"] } } }
+                    ],
+                    as: 'userDetails'
+                }
+            },
+            { $unwind: { path: '$userDetails', preserveNullAndEmptyArrays: true } },
+            { $sort: { createdAt: -1 } }
+        ]).toArray();
+
+        res.send(comments);
+    } catch (error) {
+        console.error("Error fetching comments:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
+// 4. Post New Comment to a Thread
+app.post('/api/forum/:id/comments', async (req, res) => {
+    try {
+        if (!commentsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        const id = req.params.id;
+        const commentData = req.body;
+
+        const newComment = {
+            postId: id,
+            userId: commentData.userId || "661af123f1a2b3c4d5e6f703", 
+            text: commentData.text,
+            replies: [],
+            createdAt: new Date()
+        };
+
+        const result = await commentsCollection.insertOne(newComment);
+        res.send({ success: true, insertedId: result.insertedId, message: "Comment added!" });
+    } catch (error) {
+        console.error("Error adding comment:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+// 5. Toggle Like / Dislike Vote on a Post 
+app.patch('/api/forum/:id/vote', async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+        
+        const postId = req.params.id;
+        const { userId, voteType } = req.body; // voteType can be 'like' or 'dislike'
+
+        if (!userId) {
+            return res.status(400).send({ message: "User ID is required to register a vote." });
+        }
+
+        const post = await postsCollection.findOne({ _id: new ObjectId(postId) });
+        if (!post) {
+            return res.status(404).send({ message: "Forum post not found" });
+        }
+
+        // Ensure arrays exist safely
+        const likes = post.likes || [];
+        const dislikes = post.dislikes || [];
+
+        let updateAction = {};
+
+        if (voteType === 'like') {
+            if (likes.includes(userId)) {
+                // Pull if already liked (Toggle off)
+                updateAction = { $pull: { likes: userId } };
+            } else {
+                // Add to likes, pull from dislikes to ensure exclusivity
+                updateAction = { 
+                    $addToSet: { likes: userId },
+                    $pull: { dislikes: userId }
+                };
+            }
+        } else if (voteType === 'dislike') {
+            if (dislikes.includes(userId)) {
+                // Pull if already disliked (Toggle off)
+                updateAction = { $pull: { dislikes: userId } };
+            } else {
+                // Add to dislikes, pull from likes to ensure exclusivity
+                updateAction = { 
+                    $addToSet: { dislikes: userId },
+                    $pull: { likes: userId }
+                };
+            }
+        }
+
+        await postsCollection.updateOne({ _id: new ObjectId(postId) }, updateAction);
+        
+        // Fetch updated data to return to client
+        const updatedPost = await postsCollection.findOne({ _id: new ObjectId(postId) });
+        res.send({ 
+            success: true, 
+            likes: updatedPost.likes || [], 
+            dislikes: updatedPost.dislikes || [] 
+        });
+
+    } catch (error) {
+        console.error("Error processing post vote:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
+
+// SYSTEM CHECK
+
+
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running...');
 });
