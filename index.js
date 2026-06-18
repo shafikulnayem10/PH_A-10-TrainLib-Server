@@ -143,6 +143,46 @@ app.get('/api/classes/:id', async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+
+
+app.post('/api/bookings', async (req, res) => {
+    try {
+        if (!bookingsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        const bookingData = req.body;
+
+        
+        const exists = await bookingsCollection.findOne({ 
+            classId: bookingData.classId, 
+            userEmail: bookingData.userEmail 
+        });
+
+        if (exists) {
+            return res.status(400).send({ success: false, message: "You have already booked this class" });
+        }
+
+     
+        const result = await bookingsCollection.insertOne({
+            ...bookingData,
+            bookedAt: new Date()
+        });
+
+      
+        if (classesCollection && bookingData.classId) {
+            await classesCollection.updateOne(
+                { _id: new ObjectId(bookingData.classId) },
+                { $inc: { bookingCount: 1 } }
+            );
+        }
+
+        res.send({ success: true, insertedId: result.insertedId, message: "Booking successful!" });
+    } catch (error) {
+        console.error("Error creating booking:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
 app.get('/api/bookings/check', async (req, res) => {
     try {
         if (!bookingsCollection) {
