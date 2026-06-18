@@ -306,19 +306,10 @@ app.get('/api/forum/:id/comments', async (req, res) => {
         }
         const id = req.params.id;
         
-        const comments = await commentsCollection.aggregate([
-            { $match: { postId: id } },
-            {
-                $lookup: {
-                    from: 'users',
-                    localField: 'userEmail',
-                    foreignField: 'email',
-                    as: 'userDetails'
-                }
-            },
-            { $unwind: { path: '$userDetails', preserveNullAndEmptyArrays: true } },
-            { $sort: { createdAt: -1 } }
-        ]).toArray();
+        const comments = await commentsCollection
+            .find({ postId: id })
+            .sort({ createdAt: -1 })
+            .toArray();
 
         res.send(comments);
     } catch (error) {
@@ -333,7 +324,9 @@ app.post('/api/forum/:id/comment', async (req, res) => {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
         const postId = req.params.id;
-        const { text, userEmail } = req.body;
+        const user = req.body;
+        // console.log("User making the comment:", user);
+        const { text, userEmail , userImage , userName} = req.body;
         if (!text || !userEmail) {
             return res.status(400).send({ message: "Text and email are required" });
         }
@@ -341,6 +334,8 @@ app.post('/api/forum/:id/comment', async (req, res) => {
             postId,
             text,
             userEmail,
+            userImage,
+            userName: userName || 'Community Member',
             replies: [],
             createdAt: new Date()
         };
