@@ -6,7 +6,6 @@ require('dotenv').config({ path: __dirname + '/.env' });
 const app = express();
 const port = process.env.PORT || 5000;
 
-// CORS Middleware
 app.use(cors({
     origin: ['http://localhost:3000'], 
     credentials: true
@@ -22,7 +21,6 @@ const client = new MongoClient(uri, {
     }
 });
 
-// Database Collections
 let classesCollection;
 let postsCollection;
 
@@ -33,9 +31,8 @@ async function run() {
 
         const db = client.db(process.env.AUTH_DB_NAME || "trainlibDB");
         
-        // Initialize Collections
         classesCollection = db.collection("classes");
-        postsCollection = db.collection("posts"); // Assumed collection name for forum posts
+        postsCollection = db.collection("posts"); 
       
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
@@ -46,7 +43,6 @@ async function run() {
 }
 run().catch(console.dir);
 
-// GET: 6 highest booked workout sessions
 app.get('/featured-classes', async (req, res) => {
     try {
         if (!classesCollection) {
@@ -66,14 +62,12 @@ app.get('/featured-classes', async (req, res) => {
     }
 });
 
-// GET: 4 most recent forum posts for the dynamic landing section
 app.get('/latest-posts', async (req, res) => {
     try {
         if (!postsCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
 
-        // Sort by 'createdAt' in descending order to get the newest posts first
         const result = await postsCollection
             .find()
             .sort({ createdAt: -1 })
@@ -87,11 +81,53 @@ app.get('/latest-posts', async (req, res) => {
     }
 });
 
+app.get('/all-classes', async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        const { search, category, page, perPage } = req.query;
+        
+        // Enforce the requirement: Only display approved classes
+        let query = { status: "approved" }; 
+
+        if (search) {
+            query.$or = [
+                { name: { $regex: search, $options: 'i' } },
+                { className: { $regex: search, $options: 'i' } }
+            ];
+        }
+
+        if (category && category !== 'All') {
+            query.category = category;
+        }
+
+        if (page) {
+            const currentPage = parseInt(page, 10) || 1;
+            const limitItems = parseInt(perPage, 10) || 12;
+            const skipItems = (currentPage - 1) * limitItems;
+
+            const total = await classesCollection.countDocuments(query);
+            const classes = await classesCollection.find(query).skip(skipItems).limit(limitItems).toArray();
+
+            return res.send({ total, classes });
+        }
+
+        const total = await classesCollection.countDocuments(query);
+        const classes = await classesCollection.find(query).toArray();
+        res.send({ total, classes });
+
+    } catch (error) {
+        console.error("Error fetching all classes:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running...');
 });
 
-// Server Listen
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`);
     console.log(`Localhost Link: http://localhost:${port}`); 
