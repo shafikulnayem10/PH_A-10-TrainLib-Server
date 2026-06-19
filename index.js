@@ -849,6 +849,45 @@ app.get('/api/trainer/classes/:id/students', verifyToken, verifyTrainer, async (
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+// 2. PATCH Route: Update class data
+app.patch('/api/trainer/classes/:id', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+        const classId = req.params.id;
+        const currentTrainerId = req.user._id?.toString() || req.user.id;
+        const updateData = req.body;
+
+      
+        const query = { _id: new ObjectId(classId), trainerId: currentTrainerId };
+        
+        const updateDoc = {
+            $set: {
+                className: updateData.className?.trim(),
+                category: updateData.category?.trim(),
+                difficulty: updateData.difficulty,
+                duration: updateData.duration?.trim(),
+                price: parseFloat(updateData.price),
+                classSchedule: updateData.classSchedule?.trim(),
+                description: updateData.description?.trim(),
+                objectives: updateData.objectives,
+                requirements: updateData.requirements,
+                image: updateData.image
+            }
+        };
+
+        const result = await classesCollection.updateOne(query, updateDoc);
+        if (result.modifiedCount === 0) {
+            return res.status(404).send({ success: false, message: "Class not found or no changes made" });
+        }
+
+        res.send({ success: true, message: "Class updated successfully!" });
+    } catch (error) {
+        console.error("Error updating class:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
