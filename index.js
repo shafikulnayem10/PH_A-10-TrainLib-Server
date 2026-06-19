@@ -644,7 +644,6 @@ app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
 
         const userEmail = req.user.email;
 
-       
         const userFavorites = await favoritesCollection.aggregate([
             {
                 $match: { userEmail: userEmail }
@@ -654,7 +653,12 @@ app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
                 $addFields: {
                     convertedClassId: {
                         $cond: {
-                            if: { $isValidObjectId: "$classId" },
+                            if: { 
+                                $and: [
+                                    { $ne: ["$classId", null] },
+                                    { $regexMatch: { input: { $toString: "$classId" }, regex: "^[0-9a-fA-F]{24}$" } }
+                                ]
+                            },
                             then: { $toObjectId: "$classId" },
                             else: "$classId"
                         }
@@ -680,12 +684,10 @@ app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
                     _id: 1,
                     classId: 1,
                     userEmail: 1,
-                    
-                    description: { $ifNull: ["$classDetails.description", "$description"] },
                   
-                    className: { $ifNull: ["$classDetails.className", "$className"] },
-                    name: { $ifNull: ["$classDetails.name", "$name"] },
-                    image: { $ifNull: ["$classDetails.image", "$image"] }
+                    description: { $ifNull: ["$classDetails.description", "$description", "No description available."] },
+                    className: { $ifNull: ["$classDetails.className", "$classDetails.name", "$className", "$name"] },
+                    image: { $ifNull: ["$classDetails.image", "$image", null] }
                 }
             }
         ]).toArray();
@@ -696,6 +698,61 @@ app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
         });
     } catch (error) {
         console.error("Error fetching favorite classes:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+// TRAINER ROUTES
+
+app.get('/api/trainer/overview', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!classesCollection || !bookingsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        
+       
+        const currentTrainerId = req.user._id?.toString() || req.user.id;
+
+       
+        const totalClasses = await classesCollection.countDocuments({ 
+            trainerId: currentTrainerId 
+        });
+
+       
+        const trainerClasses = await classesCollection.find({ trainerId: currentTrainerId }).toArray();
+        const totalBookings = trainerClasses.reduce((sum, currentClass) => {
+            return sum + (currentClass.bookingCount || 0);
+        }, 0);
+
+       
+        const classIds = trainerClasses.map(c => c._id?.toString());
+        
+        let recentBookings = [];
+        if (classIds.length > 0) {
+            recentBookings = await bookingsCollection.find({
+                classId: { $in: classIds }
+            })
+            .sort({ bookedAt: -1 })
+            .limit(5)
+            .toArray();
+        }
+
+        res.send({
+            success: true,
+            stats: { 
+                totalClasses, 
+                totalBookings 
+            },
+            profile: {
+                name: req.user.name,
+                email: req.user.email,
+                image: req.user.image || null,
+                role: req.user.role || 'trainer',
+            },
+            recentBookings
+        });
+    } catch (error) {
+        console.error("Error fetching trainer overview data:", error);
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
