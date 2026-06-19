@@ -808,6 +808,32 @@ app.post('/api/trainer/add-class', verifyToken, verifyTrainer, async (req, res) 
     }
 });
 
+// GET Route: Fetch all classes added by the currently logged-in trainer
+app.get('/api/trainer/my-classes', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        
+        const currentTrainerId = req.user._id?.toString() || req.user.id;
+
+       
+        const myClasses = await classesCollection
+            .find({ trainerId: currentTrainerId })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.send({
+            success: true,
+            data: myClasses
+        });
+    } catch (error) {
+        console.error("Error fetching trainer's classes:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
 });
