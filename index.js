@@ -7,15 +7,10 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors({
-    origin: ['http://localhost:3000'], 
+    origin: ['http://localhost:3000'],
     credentials: true
 }));
 app.use(express.json());
-
-const logger = (req, res, next) => {
-    console.log(`[LOG] ${req.method} request made to: ${req.url}`);
-    next();
-};
 
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, {
@@ -27,29 +22,30 @@ const client = new MongoClient(uri, {
 });
 
 let classesCollection;
-let postsCollection; 
+let postsCollection;
 let bookingsCollection;
 let favoritesCollection;
-let commentsCollection; 
-let usersCollection;      
-let sessionCollection;   
-let trainerApplicationsCollection; 
+let commentsCollection;
+let usersCollection;
+let sessionCollection;
+let trainerApplicationsCollection;
 
 async function run() {
     try {
-        await client.connect(); 
+        await client.connect();
         console.log("Successfully connected to MongoDB Atlas!");
 
         const db = client.db(process.env.AUTH_DB_NAME || "trainlibDB");
-        
+
         classesCollection = db.collection("classes");
-        postsCollection = db.collection("forum_posts"); 
+        postsCollection = db.collection("forum_posts");
         bookingsCollection = db.collection("bookings");
         favoritesCollection = db.collection("favorites");
-        commentsCollection = db.collection("forum_comments"); 
-        usersCollection = db.collection("user"); 
+        commentsCollection = db.collection("forum_comments");
+        usersCollection = db.collection("user");
         sessionCollection = db.collection("session");
-       trainerApplicationsCollection = db.collection("trainer_applications");
+        trainerApplicationsCollection = db.collection("trainer_applications");
+
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
@@ -58,6 +54,17 @@ async function run() {
     }
 }
 run().catch(console.dir);
+
+const checkSoftBan = async (req, res, next) => {
+    if (req.user?.softBanned === true) {
+        return res.status(403).send({
+            success: false,
+            message: "Action restricted by Admin. Your account has been restricted.",
+            code: "SOFT_BANNED"
+        });
+    }
+    next();
+};
 
 const verifyToken = async (req, res, next) => {
     try {
@@ -118,10 +125,10 @@ app.get('/featured-classes', async (req, res) => {
 
         const result = await classesCollection
             .find()
-            .sort({ bookingCount: -1 }) 
+            .sort({ bookingCount: -1 })
             .limit(6)
             .toArray();
-            
+
         res.send(result);
     } catch (error) {
         console.error("Error fetching featured classes:", error);
@@ -136,7 +143,7 @@ app.get('/all-classes', async (req, res) => {
         }
 
         const { search, category, page, perPage } = req.query;
-        let query = { status: "approved" }; 
+        let query = { status: "approved" };
 
         if (search) {
             query.$or = [
@@ -187,16 +194,16 @@ app.get('/api/classes/:id', async (req, res) => {
     }
 });
 
-app.post('/api/bookings', async (req, res) => {
+app.post('/api/bookings', verifyToken, verifyUser, checkSoftBan, async (req, res) => {
     try {
         if (!bookingsCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
 
         const bookingData = req.body;
-        const exists = await bookingsCollection.findOne({ 
-            classId: bookingData.classId, 
-            userEmail: bookingData.userEmail 
+        const exists = await bookingsCollection.findOne({
+            classId: bookingData.classId,
+            userEmail: bookingData.userEmail
         });
 
         if (exists) {
@@ -209,17 +216,17 @@ app.post('/api/bookings', async (req, res) => {
         });
 
         if (classesCollection && bookingData.classId) {
-            let classQuery = ObjectId.isValid(bookingData.classId) 
-                ? { _id: new ObjectId(bookingData.classId) } 
+            let classQuery = ObjectId.isValid(bookingData.classId)
+                ? { _id: new ObjectId(bookingData.classId) }
                 : { _id: bookingData.classId };
 
             await classesCollection.updateOne(classQuery, { $inc: { bookingCount: 1 } });
         }
 
-        res.send({ 
-            success: true, 
-            insertedId: result.insertedId, 
-            message: "Booking successful and count updated!" 
+        res.send({
+            success: true,
+            insertedId: result.insertedId,
+            message: "Booking successful and count updated!"
         });
     } catch (error) {
         console.error("Error creating booking:", error);
@@ -246,17 +253,17 @@ app.post('/api/favorites', async (req, res) => {
         if (!favoritesCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
-        
+
         const favoriteData = req.body;
-        const exists = await favoritesCollection.findOne({ 
-            classId: favoriteData.classId, 
-            userEmail: favoriteData.userEmail 
+        const exists = await favoritesCollection.findOne({
+            classId: favoriteData.classId,
+            userEmail: favoriteData.userEmail
         });
 
         if (exists) {
-            await favoritesCollection.deleteOne({ 
-                classId: favoriteData.classId, 
-                userEmail: favoriteData.userEmail 
+            await favoritesCollection.deleteOne({
+                classId: favoriteData.classId,
+                userEmail: favoriteData.userEmail
             });
             return res.send({ success: true, isFavorite: false, message: "Successfully removed from your favorites!" });
         } else {
@@ -340,7 +347,7 @@ app.get('/api/forum/:id/comments', async (req, res) => {
     }
 });
 
-app.post('/api/forum/:id/comment', async (req, res) => {
+app.post('/api/forum/:id/comment', verifyToken, verifyUser, checkSoftBan, async (req, res) => {
     try {
         if (!commentsCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
@@ -447,7 +454,7 @@ app.patch('/api/forum/:id/vote', async (req, res) => {
         if (!postsCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
-        
+
         const postId = req.params.id;
         const { userId, voteType } = req.body;
 
@@ -468,7 +475,7 @@ app.patch('/api/forum/:id/vote', async (req, res) => {
             if (likes.includes(userId)) {
                 updateAction = { $pull: { likes: userId } };
             } else {
-                updateAction = { 
+                updateAction = {
                     $addToSet: { likes: userId },
                     $pull: { dislikes: userId }
                 };
@@ -477,7 +484,7 @@ app.patch('/api/forum/:id/vote', async (req, res) => {
             if (dislikes.includes(userId)) {
                 updateAction = { $pull: { dislikes: userId } };
             } else {
-                updateAction = { 
+                updateAction = {
                     $addToSet: { dislikes: userId },
                     $pull: { likes: userId }
                 };
@@ -486,11 +493,11 @@ app.patch('/api/forum/:id/vote', async (req, res) => {
 
         await postsCollection.updateOne({ _id: new ObjectId(postId) }, updateAction);
         const updatedPost = await postsCollection.findOne({ _id: new ObjectId(postId) });
-        
-        res.send({ 
-            success: true, 
-            likes: updatedPost.likes || [], 
-            dislikes: updatedPost.dislikes || [] 
+
+        res.send({
+            success: true,
+            likes: updatedPost.likes || [],
+            dislikes: updatedPost.dislikes || []
         });
     } catch (error) {
         console.error("Error processing post vote:", error);
@@ -498,11 +505,7 @@ app.patch('/api/forum/:id/vote', async (req, res) => {
     }
 });
 
-//Role based Routes
-
-// APPLY AS TRAINER FEATURES
-
-app.post('/api/user/apply-trainer', verifyToken, verifyUser, async (req, res) => {
+app.post('/api/user/apply-trainer', verifyToken, verifyUser, checkSoftBan, async (req, res) => {
     try {
         if (!trainerApplicationsCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
@@ -515,12 +518,11 @@ app.post('/api/user/apply-trainer', verifyToken, verifyUser, async (req, res) =>
             return res.status(400).send({ success: false, message: "Experience and Specialty are required fields." });
         }
 
-       
         const existingApplication = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
         if (existingApplication) {
-            return res.status(400).send({ 
-                success: false, 
-                message: `You have already applied! Current Status: ${existingApplication.status}` 
+            return res.status(400).send({
+                success: false,
+                message: `You have already applied! Current Status: ${existingApplication.status}`
             });
         }
 
@@ -532,16 +534,16 @@ app.post('/api/user/apply-trainer', verifyToken, verifyUser, async (req, res) =>
             experience: parseInt(experience, 10),
             specialty: specialty,
             bio: bio || "",
-            status: "Pending", 
+            status: "Pending",
             feedback: null,
             appliedAt: new Date()
         };
 
         const result = await trainerApplicationsCollection.insertOne(applicationData);
-        res.status(201).send({ 
-            success: true, 
-            insertedId: result.insertedId, 
-            message: "Application submitted successfully! Waiting for admin approval." 
+        res.status(201).send({
+            success: true,
+            insertedId: result.insertedId,
+            message: "Application submitted successfully! Waiting for admin approval."
         });
 
     } catch (error) {
@@ -549,7 +551,6 @@ app.post('/api/user/apply-trainer', verifyToken, verifyUser, async (req, res) =>
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
-
 
 app.get('/api/user/trainer-status', verifyToken, verifyUser, async (req, res) => {
     try {
@@ -577,10 +578,6 @@ app.get('/api/user/trainer-status', verifyToken, verifyUser, async (req, res) =>
     }
 });
 
-
-
-// USER ROUTES 
-
 app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
     try {
         if (!bookingsCollection || !favoritesCollection || !trainerApplicationsCollection) {
@@ -592,7 +589,7 @@ app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
         const totalFavorites = await favoritesCollection.countDocuments({ userEmail: userEmail });
         const application = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
 
-        const trainerStatus = application ? application.status : "Not Applied"; 
+        const trainerStatus = application ? application.status : "Not Applied";
         const adminFeedback = application?.feedback || null;
 
         res.send({
@@ -636,6 +633,7 @@ app.get('/api/user/booked-classes', verifyToken, verifyUser, async (req, res) =>
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+
 app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
     try {
         if (!favoritesCollection || !classesCollection) {
@@ -649,11 +647,10 @@ app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
                 $match: { userEmail: userEmail }
             },
             {
-               
                 $addFields: {
                     convertedClassId: {
                         $cond: {
-                            if: { 
+                            if: {
                                 $and: [
                                     { $ne: ["$classId", null] },
                                     { $regexMatch: { input: { $toString: "$classId" }, regex: "^[0-9a-fA-F]{24}$" } }
@@ -676,7 +673,7 @@ app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
             {
                 $unwind: {
                     path: "$classDetails",
-                    preserveNullAndEmptyArrays: true 
+                    preserveNullAndEmptyArrays: true
                 }
             },
             {
@@ -684,7 +681,6 @@ app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
                     _id: 1,
                     classId: 1,
                     userEmail: 1,
-                  
                     description: { $ifNull: ["$classDetails.description", "$description", "No description available."] },
                     className: { $ifNull: ["$classDetails.className", "$classDetails.name", "$className", "$name"] },
                     image: { $ifNull: ["$classDetails.image", "$image", null] }
@@ -701,7 +697,6 @@ app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
-// TRAINER ROUTES
 
 app.get('/api/trainer/overview', verifyToken, verifyTrainer, async (req, res) => {
     try {
@@ -709,24 +704,19 @@ app.get('/api/trainer/overview', verifyToken, verifyTrainer, async (req, res) =>
             return res.status(500).send({ message: "Database not initialized yet" });
         }
 
-        
-       
         const currentTrainerId = req.user._id?.toString() || req.user.id;
 
-       
-        const totalClasses = await classesCollection.countDocuments({ 
-            trainerId: currentTrainerId 
+        const totalClasses = await classesCollection.countDocuments({
+            trainerId: currentTrainerId
         });
 
-       
         const trainerClasses = await classesCollection.find({ trainerId: currentTrainerId }).toArray();
         const totalBookings = trainerClasses.reduce((sum, currentClass) => {
             return sum + (currentClass.bookingCount || 0);
         }, 0);
 
-       
         const classIds = trainerClasses.map(c => c._id?.toString());
-        
+
         let recentBookings = [];
         if (classIds.length > 0) {
             recentBookings = await bookingsCollection.find({
@@ -739,9 +729,9 @@ app.get('/api/trainer/overview', verifyToken, verifyTrainer, async (req, res) =>
 
         res.send({
             success: true,
-            stats: { 
-                totalClasses, 
-                totalBookings 
+            stats: {
+                totalClasses,
+                totalBookings
             },
             profile: {
                 name: req.user.name,
@@ -756,24 +746,22 @@ app.get('/api/trainer/overview', verifyToken, verifyTrainer, async (req, res) =>
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
-// POST Route: Trainer can add a new class
-app.post('/api/trainer/add-class', verifyToken, verifyTrainer, async (req, res) => {
+
+app.post('/api/trainer/add-class', verifyToken, verifyTrainer, checkSoftBan, async (req, res) => {
     try {
         if (!classesCollection) {
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
         }
 
-        const { className, category, duration, description, objectives, requirements, image ,price } = req.body;
+        const { className, category, duration, description, objectives, requirements, image, price } = req.body;
 
-        
         if (!className || !category || !duration || !description || !image) {
-            return res.status(400).send({ 
-                success: false, 
-                message: "Missing required fields! Class name, category, duration, description, and image are mandatory." 
+            return res.status(400).send({
+                success: false,
+                message: "Missing required fields! Class name, category, duration, description, and image are mandatory."
             });
         }
 
-       
         const currentTrainerId = req.user._id?.toString() || req.user.id;
 
         const newClass = {
@@ -782,19 +770,18 @@ app.post('/api/trainer/add-class', verifyToken, verifyTrainer, async (req, res) 
             trainerEmail: req.user.email,
             className: className.trim(),
             category: category.trim(),
-            price:price,
+            price: price,
             duration: duration.trim(),
             description: description.trim(),
             objectives: objectives ? objectives.split(',').map(item => item.trim()).filter(Boolean) : [],
             requirements: requirements ? requirements.split(',').map(item => item.trim()).filter(Boolean) : [],
             image: image,
-            status: "pending",     
-            bookingCount: 0,       
-            students: [],          
+            status: "pending",
+            bookingCount: 0,
+            students: [],
             createdAt: new Date()
         };
 
-       
         const result = await classesCollection.insertOne(newClass);
 
         res.status(201).send({
@@ -809,17 +796,14 @@ app.post('/api/trainer/add-class', verifyToken, verifyTrainer, async (req, res) 
     }
 });
 
-// GET Route: Fetch all classes added by the currently logged-in trainer
 app.get('/api/trainer/my-classes', verifyToken, verifyTrainer, async (req, res) => {
     try {
         if (!classesCollection) {
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
         }
 
-        
         const currentTrainerId = req.user._id?.toString() || req.user.id;
 
-       
         const myClasses = await classesCollection
             .find({ trainerId: currentTrainerId })
             .sort({ createdAt: -1 })
@@ -834,106 +818,69 @@ app.get('/api/trainer/my-classes', verifyToken, verifyTrainer, async (req, res) 
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+
 app.get('/api/trainer/classes/:id/students', verifyToken, verifyTrainer, async (req, res) => {
     try {
         if (!bookingsCollection) {
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
         }
         const classId = req.params.id;
-        
-       
         const students = await bookingsCollection.find({ classId: classId }).toArray();
-        
         res.send({ success: true, data: students });
     } catch (error) {
         console.error("Error fetching class students:", error);
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
-// 2. PATCH Route: Update class data
-app.patch(
-  "/api/trainer/classes/:id",
-  verifyToken,
-  verifyTrainer,
-  async (req, res) => {
+
+app.patch("/api/trainer/classes/:id", verifyToken, verifyTrainer, async (req, res) => {
     try {
-      const classId = req.params.id;
+        const classId = req.params.id;
+        const currentTrainerId = req.user._id?.toString() || req.user.id;
+        const updateData = req.body;
 
-      const currentTrainerId =
-        req.user._id?.toString() ||
-        req.user.id;
+        const query = {
+            _id: new ObjectId(classId),
+            trainerId: currentTrainerId,
+        };
 
-      const updateData = req.body;
+        const updateDoc = {
+            $set: {
+                className: updateData.className?.trim(),
+                category: updateData.category?.trim(),
+                difficulty: updateData.difficulty,
+                duration: updateData.duration?.trim(),
+                price: Number(updateData.price),
+                classSchedule: updateData.classSchedule?.trim(),
+                description: updateData.description?.trim(),
+                objectives: updateData.objectives || [],
+                requirements: updateData.requirements || [],
+                image: updateData.image || "",
+            },
+        };
 
-      const query = {
-        _id: new ObjectId(classId),
-        trainerId: currentTrainerId,
-      };
+        const result = await classesCollection.updateOne(query, updateDoc);
 
-      const updateDoc = {
-        $set: {
-          className:
-            updateData.className?.trim(),
+        if (result.matchedCount === 0) {
+            return res.status(404).send({
+                success: false,
+                message: "Class not found",
+            });
+        }
 
-          category:
-            updateData.category?.trim(),
-
-          difficulty:
-            updateData.difficulty,
-
-          duration:
-            updateData.duration?.trim(),
-
-          price:
-            Number(updateData.price),
-
-          classSchedule:
-            updateData.classSchedule?.trim(),
-
-          description:
-            updateData.description?.trim(),
-
-          objectives:
-            updateData.objectives || [],
-
-          requirements:
-            updateData.requirements || [],
-
-          image:
-            updateData.image || "",
-        },
-      };
-
-      const result =
-        await classesCollection.updateOne(
-          query,
-          updateDoc
-        );
-
-      if (result.matchedCount === 0) {
-        return res.status(404).send({
-          success: false,
-          message:
-            "Class not found",
+        res.send({
+            success: true,
+            message: "Class updated successfully",
         });
-      }
-
-      res.send({
-        success: true,
-        message:
-          "Class updated successfully",
-      });
     } catch (error) {
-      console.error(error);
-
-      res.status(500).send({
-        success: false,
-        message:
-          "Internal Server Error",
-      });
+        console.error(error);
+        res.status(500).send({
+            success: false,
+            message: "Internal Server Error",
+        });
     }
-  }
-);
+});
+
 app.delete('/api/trainer/classes/:id', verifyToken, verifyTrainer, async (req, res) => {
     try {
         if (!classesCollection) {
@@ -955,10 +902,8 @@ app.delete('/api/trainer/classes/:id', verifyToken, verifyTrainer, async (req, r
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
-// FORUM POST ROUTE FOR TRAINERS
 
-// POST Route: Trainer can create a forum post
-app.post('/api/trainer/forum/create', verifyToken, verifyTrainer, async (req, res) => {
+app.post('/api/trainer/forum/create', verifyToken, verifyTrainer, checkSoftBan, async (req, res) => {
     try {
         if (!postsCollection) {
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
@@ -966,29 +911,27 @@ app.post('/api/trainer/forum/create', verifyToken, verifyTrainer, async (req, re
 
         const { title, description, image } = req.body;
 
-        // Validate required fields
         if (!title || !title.trim()) {
-            return res.status(400).send({ 
-                success: false, 
-                message: "Title is required!" 
+            return res.status(400).send({
+                success: false,
+                message: "Title is required!"
             });
         }
 
         if (!description || !description.trim()) {
-            return res.status(400).send({ 
-                success: false, 
-                message: "Description is required!" 
+            return res.status(400).send({
+                success: false,
+                message: "Description is required!"
             });
         }
 
         if (!image || !image.trim()) {
-            return res.status(400).send({ 
-                success: false, 
-                message: "Image URL is required!" 
+            return res.status(400).send({
+                success: false,
+                message: "Image URL is required!"
             });
         }
 
-        // Create new forum post
         const newPost = {
             title: title.trim(),
             description: description.trim(),
@@ -1018,7 +961,7 @@ app.post('/api/trainer/forum/create', verifyToken, verifyTrainer, async (req, re
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
-// GET Route: Fetch all forum posts created by the trainer
+
 app.get('/api/trainer/forum/my-posts', verifyToken, verifyTrainer, async (req, res) => {
     try {
         if (!postsCollection) {
@@ -1043,7 +986,6 @@ app.get('/api/trainer/forum/my-posts', verifyToken, verifyTrainer, async (req, r
     }
 });
 
-// DELETE Route: Delete a forum post
 app.delete('/api/trainer/forum/:id', verifyToken, verifyTrainer, async (req, res) => {
     try {
         if (!postsCollection) {
@@ -1053,9 +995,9 @@ app.delete('/api/trainer/forum/:id', verifyToken, verifyTrainer, async (req, res
         const postId = req.params.id;
         const trainerId = req.user._id?.toString() || req.user.id;
 
-        const query = { 
-            _id: new ObjectId(postId), 
-            authorId: trainerId 
+        const query = {
+            _id: new ObjectId(postId),
+            authorId: trainerId
         };
 
         const result = await postsCollection.deleteOne(query);
@@ -1067,7 +1009,6 @@ app.delete('/api/trainer/forum/:id', verifyToken, verifyTrainer, async (req, res
             });
         }
 
-       
         if (commentsCollection) {
             await commentsCollection.deleteMany({ postId: postId });
         }
@@ -1082,25 +1023,17 @@ app.delete('/api/trainer/forum/:id', verifyToken, verifyTrainer, async (req, res
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
-// ADMIN ROUTES
 
-// GET Route: Admin Overview with statistics
 app.get('/api/admin/overview', verifyToken, verifyAdmin, async (req, res) => {
     try {
         if (!usersCollection || !classesCollection || !bookingsCollection) {
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
         }
 
-        // Get total users
         const totalUsers = await usersCollection.countDocuments({});
-
-        // Get total classes
         const totalClasses = await classesCollection.countDocuments({});
-
-        // Get total bookings
         const totalBookings = await bookingsCollection.countDocuments({});
 
-        // Get admin profile
         const adminProfile = {
             name: req.user.name,
             email: req.user.email,
@@ -1125,11 +1058,146 @@ app.get('/api/admin/overview', verifyToken, verifyAdmin, async (req, res) => {
     }
 });
 
+app.get('/api/admin/users', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!usersCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const users = await usersCollection
+            .find({})
+            .project({
+                password: 0,
+                __v: 0
+            })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.send({
+            success: true,
+            data: users
+        });
+
+    } catch (error) {
+        console.error("Error fetching users:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
+app.patch('/api/admin/users/:id/status', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!usersCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const userId = req.params.id;
+        const { status } = req.body;
+
+        if (!['active', 'blocked'].includes(status)) {
+            return res.status(400).send({
+                success: false,
+                message: "Invalid status. Must be 'active' or 'blocked'"
+            });
+        }
+
+        const user = await usersCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) {
+            return res.status(404).send({ success: false, message: "User not found" });
+        }
+
+        if (user.role === 'admin') {
+            return res.status(403).send({
+                success: false,
+                message: "Cannot modify admin user status"
+            });
+        }
+
+        const softBanned = status === 'blocked';
+
+        const result = await usersCollection.updateOne(
+            { _id: new ObjectId(userId) },
+            {
+                $set: {
+                    softBanned: softBanned,
+                    banned: false,
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).send({ success: false, message: "User not found" });
+        }
+
+        res.send({
+            success: true,
+            message: `User ${status === 'active' ? 'unblocked' : 'blocked'} successfully`
+        });
+
+    } catch (error) {
+        console.error("Error updating user status:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
+app.patch('/api/admin/users/:id/make-admin', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!usersCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const userId = req.params.id;
+        const currentUserId = req.user._id?.toString() || req.user.id;
+
+        if (userId === currentUserId) {
+            return res.status(403).send({
+                success: false,
+                message: "Cannot modify your own role"
+            });
+        }
+
+        const user = await usersCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) {
+            return res.status(404).send({ success: false, message: "User not found" });
+        }
+
+        if (user.role === 'admin') {
+            return res.status(400).send({
+                success: false,
+                message: "User is already an admin"
+            });
+        }
+
+        const result = await usersCollection.updateOne(
+            { _id: new ObjectId(userId) },
+            {
+                $set: {
+                    role: 'admin',
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).send({ success: false, message: "User not found" });
+        }
+
+        res.send({
+            success: true,
+            message: "User promoted to admin successfully"
+        });
+
+    } catch (error) {
+        console.error("Error making user admin:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
 });
 
 app.listen(port, () => {
     console.log(`TrainLib Server listening on port ${port}`);
-    console.log(`Localhost API Base Link: http://localhost:${port}`); 
+    console.log(`Localhost API Base Link: http://localhost:${port}`);
 });
