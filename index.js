@@ -888,6 +888,27 @@ app.patch('/api/trainer/classes/:id', verifyToken, verifyTrainer, async (req, re
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+app.delete('/api/trainer/classes/:id', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+        const classId = req.params.id;
+        const currentTrainerId = req.user._id?.toString() || req.user.id;
+
+        const query = { _id: new ObjectId(classId), trainerId: currentTrainerId };
+        const result = await classesCollection.deleteOne(query);
+
+        if (result.deletedCount === 0) {
+            return res.status(404).send({ success: false, message: "Class not found or unauthorized" });
+        }
+
+        res.send({ success: true, message: "Class deleted successfully!" });
+    } catch (error) {
+        console.error("Error deleting class:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
