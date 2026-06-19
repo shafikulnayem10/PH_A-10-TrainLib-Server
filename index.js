@@ -1082,6 +1082,48 @@ app.delete('/api/trainer/forum/:id', verifyToken, verifyTrainer, async (req, res
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+// ADMIN ROUTES
+
+// GET Route: Admin Overview with statistics
+app.get('/api/admin/overview', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!usersCollection || !classesCollection || !bookingsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        // Get total users
+        const totalUsers = await usersCollection.countDocuments({});
+
+        // Get total classes
+        const totalClasses = await classesCollection.countDocuments({});
+
+        // Get total bookings
+        const totalBookings = await bookingsCollection.countDocuments({});
+
+        // Get admin profile
+        const adminProfile = {
+            name: req.user.name,
+            email: req.user.email,
+            image: req.user.image || null,
+            role: req.user.role || 'admin',
+            createdAt: req.user.createdAt || new Date()
+        };
+
+        res.send({
+            success: true,
+            stats: {
+                totalUsers,
+                totalClasses,
+                totalBookings
+            },
+            profile: adminProfile
+        });
+
+    } catch (error) {
+        console.error("Error fetching admin overview:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
