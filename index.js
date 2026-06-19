@@ -955,6 +955,133 @@ app.delete('/api/trainer/classes/:id', verifyToken, verifyTrainer, async (req, r
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+// FORUM POST ROUTE FOR TRAINERS
+
+// POST Route: Trainer can create a forum post
+app.post('/api/trainer/forum/create', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const { title, description, image } = req.body;
+
+        // Validate required fields
+        if (!title || !title.trim()) {
+            return res.status(400).send({ 
+                success: false, 
+                message: "Title is required!" 
+            });
+        }
+
+        if (!description || !description.trim()) {
+            return res.status(400).send({ 
+                success: false, 
+                message: "Description is required!" 
+            });
+        }
+
+        if (!image || !image.trim()) {
+            return res.status(400).send({ 
+                success: false, 
+                message: "Image URL is required!" 
+            });
+        }
+
+        // Create new forum post
+        const newPost = {
+            title: title.trim(),
+            description: description.trim(),
+            image: image.trim(),
+            authorId: req.user._id?.toString() || req.user.id,
+            authorName: req.user.name || "Trainer",
+            authorEmail: req.user.email,
+            authorImage: req.user.image || null,
+            authorRole: "trainer",
+            likes: [],
+            dislikes: [],
+            comments: [],
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const result = await postsCollection.insertOne(newPost);
+
+        res.status(201).send({
+            success: true,
+            insertedId: result.insertedId,
+            message: "Forum post created successfully!"
+        });
+
+    } catch (error) {
+        console.error("Error in /api/trainer/forum/create:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+// GET Route: Fetch all forum posts created by the trainer
+app.get('/api/trainer/forum/my-posts', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const trainerId = req.user._id?.toString() || req.user.id;
+
+        const myPosts = await postsCollection
+            .find({ authorId: trainerId })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.send({
+            success: true,
+            data: myPosts
+        });
+
+    } catch (error) {
+        console.error("Error fetching trainer's forum posts:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
+// DELETE Route: Delete a forum post
+app.delete('/api/trainer/forum/:id', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const postId = req.params.id;
+        const trainerId = req.user._id?.toString() || req.user.id;
+
+        const query = { 
+            _id: new ObjectId(postId), 
+            authorId: trainerId 
+        };
+
+        const result = await postsCollection.deleteOne(query);
+
+        if (result.deletedCount === 0) {
+            return res.status(404).send({
+                success: false,
+                message: "Post not found or unauthorized"
+            });
+        }
+
+       
+        if (commentsCollection) {
+            await commentsCollection.deleteMany({ postId: postId });
+        }
+
+        res.send({
+            success: true,
+            message: "Forum post deleted successfully!"
+        });
+
+    } catch (error) {
+        console.error("Error deleting forum post:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
