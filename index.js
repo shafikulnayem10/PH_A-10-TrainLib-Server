@@ -756,6 +756,57 @@ app.get('/api/trainer/overview', verifyToken, verifyTrainer, async (req, res) =>
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+// POST Route: Trainer can add a new class
+app.post('/api/trainer/add-class', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const { className, category, duration, description, objectives, requirements, image } = req.body;
+
+        
+        if (!className || !category || !duration || !description || !image) {
+            return res.status(400).send({ 
+                success: false, 
+                message: "Missing required fields! Class name, category, duration, description, and image are mandatory." 
+            });
+        }
+
+       
+        const currentTrainerId = req.user._id?.toString() || req.user.id;
+
+        const newClass = {
+            trainerId: currentTrainerId,
+            trainerName: req.user.name,
+            trainerEmail: req.user.email,
+            className: className.trim(),
+            category: category.trim(),
+            duration: duration.trim(),
+            description: description.trim(),
+            objectives: objectives ? objectives.split(',').map(item => item.trim()).filter(Boolean) : [],
+            requirements: requirements ? requirements.split(',').map(item => item.trim()).filter(Boolean) : [],
+            image: image,
+            status: "pending",     
+            bookingCount: 0,       
+            students: [],          
+            createdAt: new Date()
+        };
+
+       
+        const result = await classesCollection.insertOne(newClass);
+
+        res.status(201).send({
+            success: true,
+            insertedId: result.insertedId,
+            message: "Class added successfully! Waiting for admin approval."
+        });
+
+    } catch (error) {
+        console.error("Error in /api/trainer/add-class:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
