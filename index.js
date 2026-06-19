@@ -833,6 +833,22 @@ app.get('/api/trainer/my-classes', verifyToken, verifyTrainer, async (req, res) 
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+app.get('/api/trainer/classes/:id/students', verifyToken, verifyTrainer, async (req, res) => {
+    try {
+        if (!bookingsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+        const classId = req.params.id;
+        
+       
+        const students = await bookingsCollection.find({ classId: classId }).toArray();
+        
+        res.send({ success: true, data: students });
+    } catch (error) {
+        console.error("Error fetching class students:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
