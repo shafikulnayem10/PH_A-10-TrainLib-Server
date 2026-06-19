@@ -499,7 +499,88 @@ app.patch('/api/forum/:id/vote', async (req, res) => {
 });
 
 //Role based Routes
-//User Routes
+
+// APPLY AS TRAINER FEATURES
+
+app.post('/api/user/apply-trainer', verifyToken, verifyUser, async (req, res) => {
+    try {
+        if (!trainerApplicationsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        const { experience, specialty, bio } = req.body;
+        const userEmail = req.user.email;
+
+        if (!experience || !specialty) {
+            return res.status(400).send({ success: false, message: "Experience and Specialty are required fields." });
+        }
+
+       
+        const existingApplication = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
+        if (existingApplication) {
+            return res.status(400).send({ 
+                success: false, 
+                message: `You have already applied! Current Status: ${existingApplication.status}` 
+            });
+        }
+
+        const applicationData = {
+            userId: req.user._id,
+            userName: req.user.name,
+            userEmail: userEmail,
+            userImage: req.user.image || null,
+            experience: parseInt(experience, 10),
+            specialty: specialty,
+            bio: bio || "",
+            status: "Pending", 
+            feedback: null,
+            appliedAt: new Date()
+        };
+
+        const result = await trainerApplicationsCollection.insertOne(applicationData);
+        res.status(201).send({ 
+            success: true, 
+            insertedId: result.insertedId, 
+            message: "Application submitted successfully! Waiting for admin approval." 
+        });
+
+    } catch (error) {
+        console.error("Error creating trainer application:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
+
+app.get('/api/user/trainer-status', verifyToken, verifyUser, async (req, res) => {
+    try {
+        if (!trainerApplicationsCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        const userEmail = req.user.email;
+        const application = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
+
+        if (!application) {
+            return res.send({ success: true, status: "Not Applied", feedback: null });
+        }
+
+        res.send({
+            success: true,
+            status: application.status,
+            feedback: application.feedback || null,
+            appliedAt: application.appliedAt
+        });
+
+    } catch (error) {
+        console.error("Error fetching trainer application status:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
+
+
+
+// USER ROUTES 
+
 app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
     try {
         if (!bookingsCollection || !favoritesCollection || !trainerApplicationsCollection) {
@@ -507,14 +588,8 @@ app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
         }
 
         const userEmail = req.user.email;
-
-      
         const totalBooked = await bookingsCollection.countDocuments({ userEmail: userEmail });
-
-      
         const totalFavorites = await favoritesCollection.countDocuments({ userEmail: userEmail });
-
-      
         const application = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
 
         const trainerStatus = application ? application.status : "Not Applied"; 
@@ -522,10 +597,7 @@ app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
 
         res.send({
             success: true,
-            stats: {
-                totalBooked,
-                totalFavorites
-            },
+            stats: { totalBooked, totalFavorites },
             profile: {
                 name: req.user.name,
                 email: req.user.email,
@@ -537,8 +609,12 @@ app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
                 feedback: adminFeedback
             }
         });
+    } catch (error) {
+        console.error("Error fetching user overview data:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
 
-// Get all booked classes for the logged-in user directly from bookings collection
 app.get('/api/user/booked-classes', verifyToken, verifyUser, async (req, res) => {
     try {
         if (!bookingsCollection) {
@@ -546,26 +622,17 @@ app.get('/api/user/booked-classes', verifyToken, verifyUser, async (req, res) =>
         }
 
         const userEmail = req.user.email;
-
-        // Fetch bookings matching userEmail directly
         const bookedClasses = await bookingsCollection
             .find({ userEmail: userEmail })
-            .sort({ bookedAt: -1 }) // Newest bookings first
+            .sort({ bookedAt: -1 })
             .toArray();
 
         res.send({
             success: true,
             data: bookedClasses
         });
-
     } catch (error) {
         console.error("Error fetching booked classes:", error);
-        res.status(500).send({ message: "Internal Server Error" });
-    }
-});
-
-    } catch (error) {
-        console.error("Error fetching user overview data:", error);
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
