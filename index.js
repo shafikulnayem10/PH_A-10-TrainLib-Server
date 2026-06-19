@@ -636,6 +636,69 @@ app.get('/api/user/booked-classes', verifyToken, verifyUser, async (req, res) =>
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+app.get('/api/user/favorites', verifyToken, verifyUser, async (req, res) => {
+    try {
+        if (!favoritesCollection || !classesCollection) {
+            return res.status(500).send({ message: "Database not initialized yet" });
+        }
+
+        const userEmail = req.user.email;
+
+       
+        const userFavorites = await favoritesCollection.aggregate([
+            {
+                $match: { userEmail: userEmail }
+            },
+            {
+               
+                $addFields: {
+                    convertedClassId: {
+                        $cond: {
+                            if: { $isValidObjectId: "$classId" },
+                            then: { $toObjectId: "$classId" },
+                            else: "$classId"
+                        }
+                    }
+                }
+            },
+            {
+                $lookup: {
+                    from: "classes",
+                    localField: "convertedClassId",
+                    foreignField: "_id",
+                    as: "classDetails"
+                }
+            },
+            {
+                $unwind: {
+                    path: "$classDetails",
+                    preserveNullAndEmptyArrays: true 
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    classId: 1,
+                    userEmail: 1,
+                    
+                    description: { $ifNull: ["$classDetails.description", "$description"] },
+                  
+                    className: { $ifNull: ["$classDetails.className", "$className"] },
+                    name: { $ifNull: ["$classDetails.name", "$name"] },
+                    image: { $ifNull: ["$classDetails.image", "$image"] }
+                }
+            }
+        ]).toArray();
+
+        res.send({
+            success: true,
+            data: userFavorites
+        });
+    } catch (error) {
+        console.error("Error fetching favorite classes:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
