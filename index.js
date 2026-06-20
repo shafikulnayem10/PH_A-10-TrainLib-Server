@@ -1365,6 +1365,105 @@ app.patch('/api/admin/trainers/:id/demote', verifyToken, verifyAdmin, async (req
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+// ADMIN - MANAGE CLASSES ROUTES
+
+app.get('/api/admin/classes', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const classes = await classesCollection
+            .find({})
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.send({
+            success: true,
+            data: classes
+        });
+
+    } catch (error) {
+        console.error("Error fetching classes:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
+app.patch('/api/admin/classes/:id/status', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const classId = req.params.id;
+        const { status } = req.body;
+
+        if (!['approved', 'rejected', 'pending'].includes(status)) {
+            return res.status(400).send({
+                success: false,
+                message: "Invalid status. Must be 'approved', 'rejected', or 'pending'"
+            });
+        }
+
+        const classData = await classesCollection.findOne({ _id: new ObjectId(classId) });
+        if (!classData) {
+            return res.status(404).send({ success: false, message: "Class not found" });
+        }
+
+        const result = await classesCollection.updateOne(
+            { _id: new ObjectId(classId) },
+            {
+                $set: {
+                    status: status,
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).send({ success: false, message: "Class not found" });
+        }
+
+        res.send({
+            success: true,
+            message: `Class ${status} successfully`
+        });
+
+    } catch (error) {
+        console.error("Error updating class status:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
+app.delete('/api/admin/classes/:id', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!classesCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const classId = req.params.id;
+
+        const classData = await classesCollection.findOne({ _id: new ObjectId(classId) });
+        if (!classData) {
+            return res.status(404).send({ success: false, message: "Class not found" });
+        }
+
+        const result = await classesCollection.deleteOne({ _id: new ObjectId(classId) });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).send({ success: false, message: "Class not found" });
+        }
+
+        res.send({
+            success: true,
+            message: "Class deleted successfully"
+        });
+
+    } catch (error) {
+        console.error("Error deleting class:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
