@@ -307,13 +307,35 @@ app.get('/latest-posts', async (req, res) => {
     }
 });
 
+// FORUM ROUTES WITH PAGINATION
+
 app.get('/api/forum', async (req, res) => {
     try {
         if (!postsCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
-        const result = await postsCollection.find().sort({ createdAt: -1 }).toArray();
-        res.send(result);
+
+        const { page, perPage } = req.query;
+        const currentPage = parseInt(page, 10) || 1;
+        const limitItems = parseInt(perPage, 10) || 4;
+        const skipItems = (currentPage - 1) * limitItems;
+
+        const total = await postsCollection.countDocuments({});
+        const posts = await postsCollection
+            .find({})
+            .sort({ createdAt: -1 })
+            .skip(skipItems)
+            .limit(limitItems)
+            .toArray();
+
+        res.send({
+            total,
+            page: currentPage,
+            perPage: limitItems,
+            totalPages: Math.ceil(total / limitItems),
+            posts
+        });
+
     } catch (error) {
         console.error("Error fetching forum posts:", error);
         res.status(500).send({ message: "Internal Server Error" });
@@ -542,14 +564,53 @@ app.post('/api/user/apply-trainer', verifyToken, verifyUser, checkSoftBan, async
             return res.status(400).send({ success: false, message: "Experience and Specialty are required fields." });
         }
 
+        // Check if user has an existing application
         const existingApplication = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
+
+        // If application exists and is Pending or Approved, prevent new application
         if (existingApplication) {
-            return res.status(400).send({
-                success: false,
-                message: `You have already applied! Current Status: ${existingApplication.status}`
-            });
+            if (existingApplication.status === 'Pending') {
+                return res.status(400).send({
+                    success: false,
+                    message: `You have already applied! Current Status: ${existingApplication.status}`
+                });
+            }
+            
+            if (existingApplication.status === 'Approved') {
+                return res.status(400).send({
+                    success: false,
+                    message: 'You are already an approved trainer!'
+                });
+            }
+
+            // If status is Rejected, update the existing application instead of creating new
+            if (existingApplication.status === 'Rejected') {
+                const result = await trainerApplicationsCollection.updateOne(
+                    { _id: existingApplication._id },
+                    {
+                        $set: {
+                            experience: parseInt(experience, 10),
+                            specialty: specialty,
+                            bio: bio || "",
+                            status: "Pending",
+                            feedback: null,
+                            appliedAt: new Date()
+                        }
+                    }
+                );
+
+                if (result.matchedCount === 0) {
+                    return res.status(404).send({ success: false, message: "Application not found" });
+                }
+
+                return res.status(200).send({
+                    success: true,
+                    message: "Application re-submitted successfully! Waiting for admin approval."
+                });
+            }
         }
 
+        // Create new application for first-time applicants
         const applicationData = {
             userId: req.user._id,
             userName: req.user.name,
