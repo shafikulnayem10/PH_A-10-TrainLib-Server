@@ -1608,6 +1608,62 @@ app.get('/api/admin/transactions', verifyToken, verifyAdmin, async (req, res) =>
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+// ADMIN - MANAGE FORUM ROUTES
+
+app.get('/api/admin/forum/all-posts', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const posts = await postsCollection
+            .find({})
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.send({
+            success: true,
+            data: posts
+        });
+
+    } catch (error) {
+        console.error("Error fetching forum posts:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
+app.delete('/api/admin/forum/:id', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!postsCollection || !commentsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const postId = req.params.id;
+
+        const post = await postsCollection.findOne({ _id: new ObjectId(postId) });
+        if (!post) {
+            return res.status(404).send({ success: false, message: "Post not found" });
+        }
+
+        const result = await postsCollection.deleteOne({ _id: new ObjectId(postId) });
+
+        if (result.deletedCount === 0) {
+            return res.status(404).send({ success: false, message: "Post not found" });
+        }
+
+        // Delete all comments associated with this post
+        await commentsCollection.deleteMany({ postId: postId });
+
+        res.send({
+            success: true,
+            message: "Forum post deleted successfully"
+        });
+
+    } catch (error) {
+        console.error("Error deleting forum post:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
