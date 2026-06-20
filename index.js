@@ -1192,6 +1192,98 @@ app.patch('/api/admin/users/:id/make-admin', verifyToken, verifyAdmin, async (re
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+// ADMIN - TRAINER APPLICATIONS ROUTES
+
+app.get('/api/admin/trainer-applications', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!trainerApplicationsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const applications = await trainerApplicationsCollection
+            .find({ status: "Pending" })
+            .sort({ appliedAt: -1 })
+            .toArray();
+
+        res.send({
+            success: true,
+            data: applications
+        });
+
+    } catch (error) {
+        console.error("Error fetching trainer applications:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
+app.patch('/api/admin/trainer-applications/:id', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!trainerApplicationsCollection || !usersCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const applicationId = req.params.id;
+        const { status, feedback } = req.body;
+
+        if (!['Approved', 'Rejected'].includes(status)) {
+            return res.status(400).send({
+                success: false,
+                message: "Invalid status. Must be 'Approved' or 'Rejected'"
+            });
+        }
+
+        const application = await trainerApplicationsCollection.findOne({
+            _id: new ObjectId(applicationId)
+        });
+
+        if (!application) {
+            return res.status(404).send({ success: false, message: "Application not found" });
+        }
+
+        if (application.status !== 'Pending') {
+            return res.status(400).send({
+                success: false,
+                message: `Application is already ${application.status}`
+            });
+        }
+
+        const result = await trainerApplicationsCollection.updateOne(
+            { _id: new ObjectId(applicationId) },
+            {
+                $set: {
+                    status: status,
+                    feedback: feedback || null,
+                    reviewedAt: new Date()
+                }
+            }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).send({ success: false, message: "Application not found" });
+        }
+
+        if (status === 'Approved') {
+            await usersCollection.updateOne(
+                { _id: application.userId },
+                {
+                    $set: {
+                        role: 'trainer',
+                        updatedAt: new Date()
+                    }
+                }
+            );
+        }
+
+        res.send({
+            success: true,
+            message: `Application ${status.toLowerCase()} successfully`
+        });
+
+    } catch (error) {
+        console.error("Error updating trainer application:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
