@@ -210,8 +210,12 @@ app.post('/api/bookings', verifyToken, verifyUser, checkSoftBan, async (req, res
             return res.status(400).send({ success: false, message: "You have already booked this class" });
         }
 
+        // Get user name from the authenticated user
+        const userName = req.user?.name || bookingData.userName || 'Unknown User';
+
         const result = await bookingsCollection.insertOne({
             ...bookingData,
+            userName: userName,
             bookedAt: new Date()
         });
 
@@ -347,25 +351,35 @@ app.get('/api/forum/:id/comments', async (req, res) => {
     }
 });
 
-app.post('/api/forum/:id/comment', verifyToken, verifyUser, checkSoftBan, async (req, res) => {
+app.post('/api/forum/:id/comment', verifyToken, checkSoftBan, async (req, res) => {
     try {
         if (!commentsCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
         const postId = req.params.id;
         const { text, userEmail, userImage, userName } = req.body;
-        if (!text || !userEmail) {
+        
+        
+        const authorName = userName || req.user?.name || 'Community Member';
+        const authorEmail = userEmail || req.user?.email;
+        const authorImage = userImage || req.user?.image || null;
+        const authorRole = req.user?.role || 'user';
+
+        if (!text || !authorEmail) {
             return res.status(400).send({ message: "Text and email are required" });
         }
+
         const newComment = {
             postId,
             text,
-            userEmail,
-            userImage,
-            userName: userName || 'Community Member',
+            userEmail: authorEmail,
+            userImage: authorImage,
+            userName: authorName,
+            authorRole: authorRole,
             replies: [],
             createdAt: new Date()
         };
+
         const result = await commentsCollection.insertOne(newComment);
         res.send({ success: true, insertedId: result.insertedId });
     } catch (error) {
@@ -373,6 +387,8 @@ app.post('/api/forum/:id/comment', verifyToken, verifyUser, checkSoftBan, async 
         res.status(500).send({ message: "Internal Server Error" });
     }
 });
+
+
 
 app.patch('/api/forum/comment/:commentId', async (req, res) => {
     try {
@@ -410,7 +426,8 @@ app.delete('/api/forum/comment/:commentId', async (req, res) => {
     }
 });
 
-app.post('/api/forum/comment/:commentId/reply', async (req, res) => {
+// REPLY ROUTE - Allow all authenticated users
+app.post('/api/forum/comment/:commentId/reply', verifyToken, checkSoftBan, async (req, res) => {
     try {
         if (!commentsCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
@@ -421,15 +438,22 @@ app.post('/api/forum/comment/:commentId/reply', async (req, res) => {
         }
 
         const { text, userEmail, userName, userImage } = req.body;
-        if (!text || !userEmail) {
+        
+        const authorName = userName || req.user?.name || 'Community Member';
+        const authorEmail = userEmail || req.user?.email;
+        const authorImage = userImage || req.user?.image || null;
+        const authorRole = req.user?.role || 'user';
+
+        if (!text || !authorEmail) {
             return res.status(400).send({ message: "Text and userEmail are required" });
         }
 
         const newReply = {
             text: text.trim(),
-            userEmail,
-            userName: userName || 'Community Member',
-            userImage: userImage || null,
+            userEmail: authorEmail,
+            userName: authorName,
+            userImage: authorImage,
+            authorRole: authorRole,
             createdAt: new Date()
         };
 
@@ -1464,7 +1488,126 @@ app.delete('/api/admin/classes/:id', verifyToken, verifyAdmin, async (req, res) 
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+// ADMIN - FORUM POST ROUTES
 
+app.post('/api/admin/forum/create', verifyToken, verifyAdmin, checkSoftBan, async (req, res) => {
+    try {
+        if (!postsCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const { title, description, image } = req.body;
+
+        if (!title || !title.trim()) {
+            return res.status(400).send({
+                success: false,
+                message: "Title is required!"
+            });
+        }
+
+        if (!description || !description.trim()) {
+            return res.status(400).send({
+                success: false,
+                message: "Description is required!"
+            });
+        }
+
+        if (!image || !image.trim()) {
+            return res.status(400).send({
+                success: false,
+                message: "Image URL is required!"
+            });
+        }
+
+        const newPost = {
+            title: title.trim(),
+            description: description.trim(),
+            image: image.trim(),
+            authorId: req.user._id?.toString() || req.user.id,
+            authorName: req.user.name || "Admin",
+            authorEmail: req.user.email,
+            authorImage: req.user.image || null,
+            authorRole: "admin",
+            likes: [],
+            dislikes: [],
+            comments: [],
+            createdAt: new Date(),
+            updatedAt: new Date()
+        };
+
+        const result = await postsCollection.insertOne(newPost);
+
+        res.status(201).send({
+            success: true,
+            insertedId: result.insertedId,
+            message: "Forum post created successfully!"
+        });
+
+    } catch (error) {
+        console.error("Error in /api/admin/forum/create:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+// ADMIN - TRANSACTIONS ROUTES
+
+
+
+app.get('/api/admin/transactions', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!bookingsCollection || !usersCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        // Get all bookings with transaction data
+        const transactions = await bookingsCollection
+            .find({ 
+                transactionId: { $exists: true, $ne: null }
+            })
+            .sort({ bookedAt: -1 })
+            .toArray();
+
+        // Get all unique user emails from transactions
+        const userEmails = [...new Set(transactions.map(t => t.userEmail).filter(email => email))];
+        
+        // Fetch all users with these emails
+        const users = await usersCollection
+            .find({ email: { $in: userEmails } })
+            .toArray();
+        
+        // Create a map of email to user data
+        const userMap = {};
+        users.forEach(user => {
+            userMap[user.email] = user;
+        });
+
+        // Format transaction data with user names from users collection
+        const formattedTransactions = transactions.map(booking => {
+            const user = userMap[booking.userEmail];
+            return {
+                _id: booking._id,
+                userEmail: booking.userEmail || 'N/A',
+                userName: user?.name || booking.userName || 'Unknown User',
+                userImage: user?.image || null,
+                amount: booking.price || booking.amount || 0,
+                date: booking.bookedAt || booking.createdAt || new Date(),
+                transactionId: booking.transactionId || 'N/A',
+                classId: booking.classId,
+                className: booking.className || 'Unknown Class',
+                trainerName: booking.trainerName || 'N/A',
+                status: 'completed'
+            };
+        });
+
+        res.send({
+            success: true,
+            data: formattedTransactions
+        });
+
+    } catch (error) {
+        console.error("Error fetching transactions:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
