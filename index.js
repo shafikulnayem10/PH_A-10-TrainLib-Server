@@ -1285,6 +1285,87 @@ app.patch('/api/admin/trainer-applications/:id', verifyToken, verifyAdmin, async
     }
 });
 
+// ADMIN - MANAGE TRAINERS ROUTES
+
+app.get('/api/admin/trainers', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!usersCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const trainers = await usersCollection
+            .find({ role: 'trainer' })
+            .project({
+                password: 0,
+                __v: 0
+            })
+            .sort({ createdAt: -1 })
+            .toArray();
+
+        res.send({
+            success: true,
+            data: trainers
+        });
+
+    } catch (error) {
+        console.error("Error fetching trainers:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
+app.patch('/api/admin/trainers/:id/demote', verifyToken, verifyAdmin, async (req, res) => {
+    try {
+        if (!usersCollection) {
+            return res.status(500).send({ success: false, message: "Database not initialized yet" });
+        }
+
+        const userId = req.params.id;
+        const currentUserId = req.user._id?.toString() || req.user.id;
+
+        if (userId === currentUserId) {
+            return res.status(403).send({
+                success: false,
+                message: "Cannot demote yourself"
+            });
+        }
+
+        const user = await usersCollection.findOne({ _id: new ObjectId(userId) });
+        if (!user) {
+            return res.status(404).send({ success: false, message: "User not found" });
+        }
+
+        if (user.role !== 'trainer') {
+            return res.status(400).send({
+                success: false,
+                message: "User is not a trainer"
+            });
+        }
+
+        const result = await usersCollection.updateOne(
+            { _id: new ObjectId(userId) },
+            {
+                $set: {
+                    role: 'user',
+                    updatedAt: new Date()
+                }
+            }
+        );
+
+        if (result.matchedCount === 0) {
+            return res.status(404).send({ success: false, message: "User not found" });
+        }
+
+        res.send({
+            success: true,
+            message: "Trainer demoted to user successfully"
+        });
+
+    } catch (error) {
+        console.error("Error demoting trainer:", error);
+        res.status(500).send({ success: false, message: "Internal Server Error" });
+    }
+});
+
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
 });
