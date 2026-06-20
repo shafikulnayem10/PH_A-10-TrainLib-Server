@@ -1031,7 +1031,7 @@ app.get('/api/admin/overview', verifyToken, verifyAdmin, async (req, res) => {
         }
 
         const totalUsers = await usersCollection.countDocuments({});
-        const totalClasses = await classesCollection.countDocuments({});
+        const totalClasses = await classesCollection.countDocuments({ status: 'approved' });
         const totalBookings = await bookingsCollection.countDocuments({});
 
         const adminProfile = {
@@ -1464,6 +1464,7 @@ app.delete('/api/admin/classes/:id', verifyToken, verifyAdmin, async (req, res) 
         res.status(500).send({ success: false, message: "Internal Server Error" });
     }
 });
+
 
 app.get('/', (req, res) => {
     res.send('TrainLib Server is running smoothly...');
