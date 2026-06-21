@@ -46,7 +46,7 @@ async function run() {
         sessionCollection = db.collection("session");
         trainerApplicationsCollection = db.collection("trainer_applications");
 
-        await client.db("admin").command({ ping: 1 });
+        // await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
     } catch (error) {
@@ -644,9 +644,37 @@ app.get('/api/user/trainer-status', verifyToken, verifyUser, async (req, res) =>
         }
 
         const userEmail = req.user.email;
+        
+        // First check if user is a trainer
+        if (req.user?.role === 'trainer') {
+            const application = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
+            if (application) {
+                return res.send({
+                    success: true,
+                    status: application.status,
+                    feedback: application.feedback || null,
+                    appliedAt: application.appliedAt
+                });
+            }
+            // If user is trainer but no application exists, return approved status
+            return res.send({
+                success: true,
+                status: 'Approved',
+                feedback: null,
+                appliedAt: null
+            });
+        }
+
+        // For non-trainers, check for application
         const application = await trainerApplicationsCollection.findOne({ userEmail: userEmail });
 
         if (!application) {
+            return res.send({ success: true, status: "Not Applied", feedback: null });
+        }
+
+      
+        if (application.status === 'Approved' && req.user?.role !== 'trainer') {
+            await trainerApplicationsCollection.deleteOne({ userEmail: userEmail });
             return res.send({ success: true, status: "Not Applied", feedback: null });
         }
 
@@ -699,19 +727,54 @@ app.get('/api/user/overview', verifyToken, verifyUser, async (req, res) => {
 
 app.get('/api/user/booked-classes', verifyToken, verifyUser, async (req, res) => {
     try {
-        if (!bookingsCollection) {
+        if (!bookingsCollection || !classesCollection) {
             return res.status(500).send({ message: "Database not initialized yet" });
         }
 
         const userEmail = req.user.email;
+
+        // Get all bookings for the user
         const bookedClasses = await bookingsCollection
             .find({ userEmail: userEmail })
             .sort({ bookedAt: -1 })
             .toArray();
 
+        // Enrich bookings with class schedule data
+        const enrichedBookings = await Promise.all(
+            bookedClasses.map(async (booking) => {
+                let classSchedule = null;
+                let classDetails = null;
+
+                // Try to find the class in classes collection
+                if (booking.classId) {
+                    try {
+                        // Check if classId is a valid ObjectId
+                        let query;
+                        if (ObjectId.isValid(booking.classId)) {
+                            query = { _id: new ObjectId(booking.classId) };
+                        } else {
+                            query = { _id: booking.classId };
+                        }
+                        
+                        classDetails = await classesCollection.findOne(query);
+                        if (classDetails) {
+                            classSchedule = classDetails.classSchedule || null;
+                        }
+                    } catch (error) {
+                        console.error("Error fetching class details:", error);
+                    }
+                }
+
+                return {
+                    ...booking,
+                    classSchedule: classSchedule || booking.classSchedule || null
+                };
+            })
+        );
+
         res.send({
             success: true,
-            data: bookedClasses
+            data: enrichedBookings
         });
     } catch (error) {
         console.error("Error fetching booked classes:", error);
@@ -838,7 +901,7 @@ app.post('/api/trainer/add-class', verifyToken, verifyTrainer, checkSoftBan, asy
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
         }
 
-        const { className, category, duration, description, objectives, requirements, image, price } = req.body;
+        const { className, category, duration, description, objectives, requirements, image, price, classSchedule } = req.body;
 
         if (!className || !category || !duration || !description || !image) {
             return res.status(400).send({
@@ -857,6 +920,7 @@ app.post('/api/trainer/add-class', verifyToken, verifyTrainer, checkSoftBan, asy
             category: category.trim(),
             price: price,
             duration: duration.trim(),
+            classSchedule: classSchedule?.trim() || null,
             description: description.trim(),
             objectives: objectives ? objectives.split(',').map(item => item.trim()).filter(Boolean) : [],
             requirements: requirements ? requirements.split(',').map(item => item.trim()).filter(Boolean) : [],
@@ -936,7 +1000,7 @@ app.patch("/api/trainer/classes/:id", verifyToken, verifyTrainer, async (req, re
                 difficulty: updateData.difficulty,
                 duration: updateData.duration?.trim(),
                 price: Number(updateData.price),
-                classSchedule: updateData.classSchedule?.trim(),
+                classSchedule: updateData.classSchedule?.trim() || null,
                 description: updateData.description?.trim(),
                 objectives: updateData.objectives || [],
                 requirements: updateData.requirements || [],
@@ -968,20 +1032,44 @@ app.patch("/api/trainer/classes/:id", verifyToken, verifyTrainer, async (req, re
 
 app.delete('/api/trainer/classes/:id', verifyToken, verifyTrainer, async (req, res) => {
     try {
-        if (!classesCollection) {
+        if (!classesCollection || !bookingsCollection || !favoritesCollection) {
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
         }
         const classId = req.params.id;
         const currentTrainerId = req.user._id?.toString() || req.user.id;
 
-        const query = { _id: new ObjectId(classId), trainerId: currentTrainerId };
-        const result = await classesCollection.deleteOne(query);
+        // Find the class first to verify ownership
+        const classData = await classesCollection.findOne({ 
+            _id: new ObjectId(classId), 
+            trainerId: currentTrainerId 
+        });
+
+        if (!classData) {
+            return res.status(404).send({ success: false, message: "Class not found or unauthorized" });
+        }
+
+        // Delete the class
+        const result = await classesCollection.deleteOne({ 
+            _id: new ObjectId(classId), 
+            trainerId: currentTrainerId 
+        });
 
         if (result.deletedCount === 0) {
             return res.status(404).send({ success: false, message: "Class not found or unauthorized" });
         }
 
-        res.send({ success: true, message: "Class deleted successfully!" });
+        // Delete all bookings associated with this class
+        const deleteBookingsResult = await bookingsCollection.deleteMany({ classId: classId });
+
+        // Delete all favorites associated with this class
+        const deleteFavoritesResult = await favoritesCollection.deleteMany({ classId: classId });
+
+        res.send({ 
+            success: true, 
+            message: "Class deleted successfully!",
+            bookingsDeleted: deleteBookingsResult.deletedCount || 0,
+            favoritesDeleted: deleteFavoritesResult.deletedCount || 0
+        });
     } catch (error) {
         console.error("Error deleting class:", error);
         res.status(500).send({ success: false, message: "Internal Server Error" });
@@ -1400,7 +1488,7 @@ app.get('/api/admin/trainers', verifyToken, verifyAdmin, async (req, res) => {
 
 app.patch('/api/admin/trainers/:id/demote', verifyToken, verifyAdmin, async (req, res) => {
     try {
-        if (!usersCollection) {
+        if (!usersCollection || !trainerApplicationsCollection) {
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
         }
 
@@ -1426,6 +1514,7 @@ app.patch('/api/admin/trainers/:id/demote', verifyToken, verifyAdmin, async (req
             });
         }
 
+        // Update user role to 'user'
         const result = await usersCollection.updateOne(
             { _id: new ObjectId(userId) },
             {
@@ -1440,9 +1529,17 @@ app.patch('/api/admin/trainers/:id/demote', verifyToken, verifyAdmin, async (req
             return res.status(404).send({ success: false, message: "User not found" });
         }
 
+        // Reset trainer application status to 'Not Applied' by deleting the application
+        const deleteResult = await trainerApplicationsCollection.deleteOne({ 
+            userId: new ObjectId(userId) 
+        });
+
+      
+
         res.send({
             success: true,
-            message: "Trainer demoted to user successfully"
+            message: "Trainer demoted to user successfully",
+            applicationReset: deleteResult.deletedCount > 0 ? "Application status reset" : "No application found"
         });
 
     } catch (error) {
@@ -1522,26 +1619,36 @@ app.patch('/api/admin/classes/:id/status', verifyToken, verifyAdmin, async (req,
 
 app.delete('/api/admin/classes/:id', verifyToken, verifyAdmin, async (req, res) => {
     try {
-        if (!classesCollection) {
+        if (!classesCollection || !bookingsCollection || !favoritesCollection) {
             return res.status(500).send({ success: false, message: "Database not initialized yet" });
         }
 
         const classId = req.params.id;
 
+        // Find the class first
         const classData = await classesCollection.findOne({ _id: new ObjectId(classId) });
         if (!classData) {
             return res.status(404).send({ success: false, message: "Class not found" });
         }
 
+        // Delete the class
         const result = await classesCollection.deleteOne({ _id: new ObjectId(classId) });
 
         if (result.deletedCount === 0) {
             return res.status(404).send({ success: false, message: "Class not found" });
         }
 
+        // Delete all bookings associated with this class
+        const deleteBookingsResult = await bookingsCollection.deleteMany({ classId: classId });
+
+        // Delete all favorites associated with this class
+        const deleteFavoritesResult = await favoritesCollection.deleteMany({ classId: classId });
+
         res.send({
             success: true,
-            message: "Class deleted successfully"
+            message: "Class deleted successfully",
+            bookingsDeleted: deleteBookingsResult.deletedCount || 0,
+            favoritesDeleted: deleteFavoritesResult.deletedCount || 0
         });
 
     } catch (error) {
