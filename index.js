@@ -22,6 +22,15 @@ const client = new MongoClient(uri, {
     }
 });
 
+const uri = process.env.MONGODB_URI;
+const client = new MongoClient(uri, {
+    serverApi: {
+        version: ServerApiVersion.v1,
+        strict: true,
+        deprecationErrors: true,
+    }
+});
+
 let classesCollection;
 let postsCollection;
 let bookingsCollection;
@@ -32,15 +41,11 @@ let sessionCollection;
 let trainerApplicationsCollection;
 
 
-// async function run() {
-//    
-//         await client.connect();
-//         console.log("Successfully connected to MongoDB Atlas!");
-client.connect(()=>{
-    console.log("connecting to MongoDB");
-}).catch(console.dir)
+async function connectToDatabase() {
+    try {
+        await client.connect();
+        console.log("Successfully connected to MongoDB Atlas!");
 
- try {
         const db = client.db(process.env.AUTH_DB_NAME || "trainlibDB");
 
         classesCollection = db.collection("classes");
@@ -52,14 +57,16 @@ client.connect(()=>{
         sessionCollection = db.collection("session");
         trainerApplicationsCollection = db.collection("trainer_applications");
 
-        // await client.db("admin").command({ ping: 1 });
-        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
-
+        console.log("All collections initialized successfully!");
+        return true;
     } catch (error) {
         console.error("MongoDB Connection Error:", error);
+        return false;
     }
-// }
-// // run().catch(console.dir);
+}
+
+// Call the connection function
+connectToDatabase();
 
 const checkSoftBan = async (req, res, next) => {
     if (req.user?.softBanned === true) {
