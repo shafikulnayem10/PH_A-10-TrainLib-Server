@@ -54,7 +54,7 @@ async function run() {
         console.error("MongoDB Connection Error:", error);
     }
 }
-// run().catch(console.dir);
+run().catch(console.dir);
 
 const checkSoftBan = async (req, res, next) => {
     if (req.user?.softBanned === true) {
