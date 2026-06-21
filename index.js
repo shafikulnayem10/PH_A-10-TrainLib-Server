@@ -31,11 +31,16 @@ let usersCollection;
 let sessionCollection;
 let trainerApplicationsCollection;
 
-async function run() {
-    try {
-        await client.connect();
-        console.log("Successfully connected to MongoDB Atlas!");
 
+// async function run() {
+//    
+//         await client.connect();
+//         console.log("Successfully connected to MongoDB Atlas!");
+client.connect(()=>{
+    console.log("connecting to MongoDB");
+}).catch(console.dir)
+
+ try {
         const db = client.db(process.env.AUTH_DB_NAME || "trainlibDB");
 
         classesCollection = db.collection("classes");
@@ -48,13 +53,13 @@ async function run() {
         trainerApplicationsCollection = db.collection("trainer_applications");
 
         // await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
+        // console.log("Pinged your deployment. You successfully connected to MongoDB!");
 
     } catch (error) {
         console.error("MongoDB Connection Error:", error);
     }
-}
-run().catch(console.dir);
+// }
+// // run().catch(console.dir);
 
 const checkSoftBan = async (req, res, next) => {
     if (req.user?.softBanned === true) {
@@ -1842,3 +1847,5 @@ app.listen(port, () => {
     console.log(`TrainLib Server listening on port ${port}`);
     console.log(`Localhost API Base Link: http://localhost:${port}`);
 });
+
+module.exports = app;
