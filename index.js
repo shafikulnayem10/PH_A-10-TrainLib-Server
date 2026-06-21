@@ -1,3 +1,66 @@
+// require('dotenv').config({ path: __dirname + '/.env' });
+// const express = require('express');
+// const cors = require('cors');
+// const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+
+// const app = express();
+// const port = process.env.PORT || 5000;
+
+// app.use(cors({
+//     origin: ['http://localhost:3000', 'https://train-lib-seven.vercel.app'],
+//     credentials: true
+// }));
+
+// app.use(express.json());
+
+// const uri = process.env.MONGODB_URI;
+// const client = new MongoClient(uri, {
+//     serverApi: {
+//         version: ServerApiVersion.v1,
+//         strict: true,
+//         deprecationErrors: true,
+//     }
+// });
+
+// // let classesCollection;
+// // let postsCollection;
+// // let bookingsCollection;
+// // let favoritesCollection;
+// // let commentsCollection;
+// // let usersCollection;
+// // let sessionCollection;
+// // let trainerApplicationsCollection;
+
+
+// // // async function run() {
+// // //    
+// // //         await client.connect();
+// // //         console.log("Successfully connected to MongoDB Atlas!");
+// // client.connect(()=>{
+// //     console.log("connecting to MongoDB");
+// // }).catch(console.dir)
+
+// //  try {
+// //         const db = client.db(process.env.AUTH_DB_NAME || "trainlibDB");
+
+// //         classesCollection = db.collection("classes");
+// //         postsCollection = db.collection("forum_posts");
+// //         bookingsCollection = db.collection("bookings");
+// //         favoritesCollection = db.collection("favorites");
+// //         commentsCollection = db.collection("forum_comments");
+// //         usersCollection = db.collection("user");
+// //         sessionCollection = db.collection("session");
+// //         trainerApplicationsCollection = db.collection("trainer_applications");
+
+// //         // await client.db("admin").command({ ping: 1 });
+// //         // console.log("Pinged your deployment. You successfully connected to MongoDB!");
+
+// //     } catch (error) {
+// //         console.error("MongoDB Connection Error:", error);
+// //     }
+// // // }
+// // // // run().catch(console.dir);
+
 require('dotenv').config({ path: __dirname + '/.env' });
 const express = require('express');
 const cors = require('cors');
@@ -12,15 +75,6 @@ app.use(cors({
 }));
 
 app.use(express.json());
-
-const uri = process.env.MONGODB_URI;
-const client = new MongoClient(uri, {
-    serverApi: {
-        version: ServerApiVersion.v1,
-        strict: true,
-        deprecationErrors: true,
-    }
-});
 
 const uri = process.env.MONGODB_URI;
 const client = new MongoClient(uri, {
@@ -57,16 +111,25 @@ async function connectToDatabase() {
         sessionCollection = db.collection("session");
         trainerApplicationsCollection = db.collection("trainer_applications");
 
-        console.log("All collections initialized successfully!");
+        console.log(" All collections initialized successfully!");
+        console.log(` Classes collection: ${classesCollection ? 'Ready' : 'Failed'}`);
+        console.log(` Users collection: ${usersCollection ? 'Ready' : 'Failed'}`);
+        
+       
+        const classCount = await classesCollection.countDocuments();
+        console.log(`Total classes in database: ${classCount}`);
+        
         return true;
     } catch (error) {
-        console.error("MongoDB Connection Error:", error);
+        console.error(" MongoDB Connection Error:", error);
         return false;
     }
 }
 
 // Call the connection function
 connectToDatabase();
+
+
 
 const checkSoftBan = async (req, res, next) => {
     if (req.user?.softBanned === true) {
