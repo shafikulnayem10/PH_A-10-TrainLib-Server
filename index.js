@@ -860,15 +860,23 @@ app.get('/api/trainer/overview', verifyToken, verifyTrainer, async (req, res) =>
 
         const currentTrainerId = req.user._id?.toString() || req.user.id;
 
+       
         const totalClasses = await classesCollection.countDocuments({
-            trainerId: currentTrainerId
+            trainerId: currentTrainerId,
+            status: 'approved'
         });
 
-        const trainerClasses = await classesCollection.find({ trainerId: currentTrainerId }).toArray();
+        // Get all classes (including pending/rejected) for booking calculation
+        const trainerClasses = await classesCollection.find({ 
+            trainerId: currentTrainerId 
+        }).toArray();
+        
+        // Calculate total bookings from all classes
         const totalBookings = trainerClasses.reduce((sum, currentClass) => {
             return sum + (currentClass.bookingCount || 0);
         }, 0);
 
+        // Get class IDs for recent bookings
         const classIds = trainerClasses.map(c => c._id?.toString());
 
         let recentBookings = [];
@@ -884,7 +892,7 @@ app.get('/api/trainer/overview', verifyToken, verifyTrainer, async (req, res) =>
         res.send({
             success: true,
             stats: {
-                totalClasses,
+                totalClasses, 
                 totalBookings
             },
             profile: {
