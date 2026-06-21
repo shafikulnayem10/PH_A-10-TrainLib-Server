@@ -7,9 +7,10 @@ const app = express();
 const port = process.env.PORT || 5000;
 
 app.use(cors({
-    origin: ['http://localhost:3000'],
+    origin: ['http://localhost:3000', 'https://train-lib-seven.vercel.app'],
     credentials: true
 }));
+
 app.use(express.json());
 
 const uri = process.env.MONGODB_URI;
@@ -53,7 +54,7 @@ async function run() {
         console.error("MongoDB Connection Error:", error);
     }
 }
-run().catch(console.dir);
+// run().catch(console.dir);
 
 const checkSoftBan = async (req, res, next) => {
     if (req.user?.softBanned === true) {
