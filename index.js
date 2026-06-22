@@ -52,10 +52,11 @@ async function connectToDatabase() {
         sessionCollection = cachedDb.collection("session");
         trainerApplicationsCollection = cachedDb.collection("trainer_applications");
 
-        console.log("✅ Connected to MongoDB (Serverless)");
+        // console.log("Connected to MongoDB (Serverless)");
+        
         return { client: cachedClient, db: cachedDb };
     } catch (error) {
-        console.error("❌ MongoDB Connection Error:", error);
+        console.error(" MongoDB Connection Error:", error);
         throw error;
     }
 }
