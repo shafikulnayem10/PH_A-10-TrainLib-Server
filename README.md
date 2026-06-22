@@ -47,7 +47,7 @@ This repository houses the core backend architecture for **TrainLib**. Built on 
 
 ### Prerequisites
 Ensure you have the following installed and set up:
-* **Node.js** (v18.0.0 or higher)
+* **Node.js** (v18.0.0 )
 * **MongoDB Atlas** Cluster
 * **Stripe** Developer Account Keys
 
