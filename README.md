@@ -55,7 +55,7 @@ Ensure you have the following installed and set up:
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/yourusername/trainlib-server.git](https://github.com/yourusername/trainlib-server.git)
+   git clone https://github.com/shafikulnayem10/PH_A-10-TrainLib-Server.git
    cd trainlib-server
 
 ```
