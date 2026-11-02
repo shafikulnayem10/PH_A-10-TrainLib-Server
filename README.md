@@ -1,8 +1,4 @@
-
-
-
-<div align="center">
- 
+ <div align="center">
 
   # 🖥️ TrainLib Server
   ### The Robust REST API Engine for TrainLib Platform
@@ -12,13 +8,24 @@
   [![MongoDB](https://img.shields.io/badge/MongoDB-7.3-47A248?style=flat-square&logo=mongodb)](https://www.mongodb.com/)
   [![Better Auth](https://img.shields.io/badge/Better--Auth-1.6-orange?style=flat-square)](https://better-auth.com/)
   [![Stripe](https://img.shields.io/badge/Stripe-Payments-635BFF?style=flat-square&logo=stripe)](https://stripe.com/)
+
+  **A powerful backend engine managing authentication, fitness classes, bookings, payments, and platform operations.**
+
+  🌐 [Live Website](https://train-lib-seven.vercel.app) • 💻 [Frontend Repository](https://github.com/shafikulnayem10/PH_A-10-TrainLib-Client) • ⚙️ [Backend Repository](https://github.com/shafikulnayem10/PH_A-10-TrainLib-Server)
+
 </div>
 
 ---
 
 ## 📖 Overview
 
-This repository houses the core backend architecture for **TrainLib**. Built on top of Node.js and Express.js, this server handles complex database transactions, manages secure JWT sessions via Better Auth, processes subscriptions/payments through Stripe, and serves data visualizations efficiently.
+This repository houses the core backend architecture for **TrainLib**. Built on top of Node.js and Express.js, this server handles complex database transactions, manages secure JWT sessions via Better Auth, processes payments through Stripe, and serves data efficiently.
+
+TrainLib is a full-stack fitness and gym management platform designed to connect fitness enthusiasts, professional trainers, and platform administrators through a unified ecosystem.
+
+**Related Repository:**
+- Frontend: [PH_A-10-TrainLib-Client](https://github.com/shafikulnayem10/PH_A-10-TrainLib-Client)
+- Live Application: [TrainLib](https://train-lib-seven.vercel.app)
 
 ---
 
@@ -46,55 +53,59 @@ This repository houses the core backend architecture for **TrainLib**. Built on 
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 Ensure you have the following installed and set up:
-* **Node.js** (v18.0.0 )
+
+* **Node.js** (v18.0.0 or higher)
 * **MongoDB Atlas** Cluster
 * **Stripe** Developer Account Keys
 
 ### Installation & Local Setup
 
 1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/shafikulnayem10/PH_A-10-TrainLib-Server.git
-   cd trainlib-server
 
+```bash
+git clone https://github.com/shafikulnayem10/PH_A-10-TrainLib-Server.git
+
+cd PH_A-10-TrainLib-Server
 ```
 
-2. **Install node modules:**
+2. **Install dependencies:**
+
 ```bash
 npm install
-
 ```
 
-
 3. **Configure Environment Variables:**
-Create a `.env` file in the root directory and fill out the configuration:
 
-
+Create a `.env` file in the root directory and configure the required environment variables, including MongoDB connection credentials, Stripe secret keys, and other necessary configuration values.
 
 4. **Boot up the server:**
+
 ```bash
 # Production mode
 node index.js
 
-# Development mode (If nodemon is configured)
+# Development mode (if nodemon is configured)
 npm run dev
-
 ```
 
+The backend engine should now be running locally on:
 
-The backend engine should now be running locally on `http://localhost:5000`.
+`http://localhost:5000`
 
 ---
 
-
 ## 🌐 Deployment
 
-The production server is architected to deploy flawlessly as Serverless Functions on **Vercel**.
+The production server is deployed using **Vercel Serverless Functions**.
 
+**Deployment Checklist:**
 
-
-*Note: Remember to inject all required `.env` keys inside the Vercel Project Dashboard settings before running deployments.*
+* Configure all required environment variables in the Vercel Project Dashboard.
+* Ensure MongoDB Atlas allows connections from the deployed server.
+* Configure the frontend API base URL to point to the deployed backend.
+* Verify Stripe configuration and payment endpoints after deployment.
 
 ---
 
@@ -102,5 +113,15 @@ The production server is architected to deploy flawlessly as Serverless Function
 
 **Shafiqul Islam Nayem**
 
+- GitHub: [@shafikulnayem10](https://github.com/shafikulnayem10)
+- LinkedIn: [Shafiqul Islam Nayem](https://www.linkedin.com/in/shafiqulislamnayem/)
 
 ---
+
+<div align="center">
+
+**⭐ If you find this project interesting, consider giving the repository a star!**
+
+Made with ❤️ by Shafiqul Islam Nayem
+
+</div>
